@@ -176,15 +176,30 @@ void Subdivide( uint nodeIdx )
 
 void BasicBVHApp::Init()
 {
-	// intialize a scene with N random triangles
-	for (int i = 0; i < N; i++)
+
+	// Option 1: Read from triangle files.
+	FILE* file = fopen( "assets/unity.tri", "r" );
+	float a, b, c, d, e, f, g, h, i;
+	for (int t = 0; t < N; t++)
 	{
-		float3 r0 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
-		float3 r1 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
-		float3 r2 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
-		tri[i].vertex0 = r0 * 9 - float3( 5 );
-		tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
+		fscanf( file, "%f %f %f %f %f %f %f %f %f\n",
+			&a, &b, &c, &d, &e, &f, &g, &h, &i );
+		tri[t].vertex0 = float3( a, b, c );
+		tri[t].vertex1 = float3( d, e, f );
+		tri[t].vertex2 = float3( g, h, i );
 	}
+	fclose( file );
+
+	// Option 2: Generate random triangles.
+	// intialize a scene with N random triangles
+	// for (int i = 0; i < N; i++)
+	// {
+	// 	float3 r0 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+	// 	float3 r1 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+	// 	float3 r2 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+	// 	tri[i].vertex0 = r0 * 9 - float3( 5 );
+	// 	tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
+	// }
 	// construct the BVH
 	BuildBVH();
 }
