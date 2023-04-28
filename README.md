@@ -7,3 +7,6 @@ Hang Hu, Xiaoyuan Jin, Yifan Bao, Yiqun Liu
 ...
 
 Let's work hard!
+
+## Build
+g++ basics.cpp -Itemplate -I./ -I./lib -o output
