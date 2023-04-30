@@ -47,6 +47,13 @@ using namespace Tmpl8;
 #define CHECK_RESULT
 #endif
 
+/*
+	Enable or disable this FLOPCOUNT for measurement.
+*/
+// #define COUNTFLOPS
+typedef long long ll;
+ll flopcount = 0;
+
 // vector type placeholders, carefully matching OpenCL's layout and alignment
 struct ALIGN( 8 ) int2
 {

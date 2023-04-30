@@ -58,24 +58,52 @@ uint rootNodeIdx = 0, nodesUsed = 1;
 
 void IntersectTri( Ray& ray, const Tri& tri )
 {
-	const float3 edge1 = tri.vertex1 - tri.vertex0;
-	const float3 edge2 = tri.vertex2 - tri.vertex0;
-	const float3 h = cross( ray.D, edge2 );
-	const float a = dot( edge1, h );
-	if (a > -0.0001f && a < 0.0001f) return; // ray parallel to triangle
-	const float f = 1 / a;
-	const float3 s = ray.O - tri.vertex0;
-	const float u = f * dot( s, h );
-	if (u < 0 || u > 1) return;
-	const float3 q = cross( s, edge1 );
-	const float v = f * dot( ray.D, q );
-	if (v < 0 || u + v > 1) return;
-	const float t = f * dot( edge2, q );
-	if (t > 0.0001f) ray.t = min( ray.t, t );
+	const float3 edge1 = tri.vertex1 - tri.vertex0;		// 3 flops
+	const float3 edge2 = tri.vertex2 - tri.vertex0; 	// 3 flops
+	const float3 h = cross( ray.D, edge2 );				// 9 flops
+	const float a = dot( edge1, h );					// 5 flops
+	if (a > -0.0001f && a < 0.0001f) {					// 2 flops
+		#ifdef COUNTFLOPS
+			flopcount += 22;
+		#endif
+		return; 		// ray parallel to triangle		
+	}
+	const float f = 1 / a;								// 1 flop
+	const float3 s = ray.O - tri.vertex0;				// 3 flops
+	const float u = f * dot( s, h );					// 6 flops
+	if (u < 0 || u > 1) {								// 2 flops
+		#ifdef COUNTFLOPS
+			flopcount += 34;
+		#endif
+		return;
+	}
+	const float3 q = cross( s, edge1 );					// 9 flops
+	const float v = f * dot( ray.D, q );				// 6 flops
+	if (v < 0 || u + v > 1) {							// 3 flops
+		#ifdef COUNTFLOPS
+			flopcount += 52;
+		#endif
+		return;
+	}
+	const float t = f * dot( edge2, q );				// 6 flops
+	if (t > 0.0001f) {									// 1 flop
+		ray.t = min( ray.t, t );						// 1 flop
+		#ifdef COUNTFLOPS
+			flopcount += 60;
+		#endif
+		return;
+	}
+	#ifdef COUNTFLOPS
+		flopcount += 59;
+	#endif
 }
 
+// flopcount = 25
 bool IntersectAABB( const Ray& ray, const float3 bmin, const float3 bmax )
 {
+	#ifdef COUNTFLOPS
+		flopcount += 25;
+	#endif
 	float tx1 = (bmin.x - ray.O.x) / ray.D.x, tx2 = (bmax.x - ray.O.x) / ray.D.x;
 	float tmin = min( tx1, tx2 ), tmax = max( tx1, tx2 );
 	float ty1 = (bmin.y - ray.O.y) / ray.D.y, ty2 = (bmax.y - ray.O.y) / ray.D.y;
@@ -217,15 +245,16 @@ void BasicBVHApp::Tick( float deltaTime )
 		ray.O = float3( 0, 0, -18 );
 		ray.D = normalize( pixelPos - ray.O );
 		ray.t = 1e30f;
-	#if 0
-		for( int i = 0; i < N; i++ ) IntersectTri( ray, tri[i] );
-	#else
+
 		IntersectBVH( ray, rootNodeIdx );
-	#endif
+
 		// if (ray.t < 1e30f) screen->Plot( x, y, 0xffffff );
 	}
 	float elapsed = t.elapsed() * 1000;
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
+	#ifdef COUNTFLOPS
+		printf("FLOPS COUNT: %lld flops\n", flopcount);
+	#endif
 }
 
 
