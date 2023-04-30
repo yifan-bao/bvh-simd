@@ -31,7 +31,7 @@ float RandomFloat() { return RandomUInt() * 2.3283064365387e-10f; }
 float RandomFloat( uint& seed ) { return RandomUInt( seed ) * 2.3283064365387e-10f; }
 
 // triangle count
-#define N	64
+#define N	64 // 12582 unity vehicle mesh. 64 for random.
 
 // forward declarations
 void Subdivide( uint nodeIdx );
