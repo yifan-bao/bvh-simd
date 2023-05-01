@@ -8,5 +8,7 @@ Hang Hu, Xiaoyuan Jin, Yifan Bao, Yiqun Liu
 
 Let's work hard!
 
+quickbuild.cpp is our baseline model
 ## Build
 g++ basics.cpp -Itemplate -I./ -I./lib -o output
+g++ quickbuild.cpp -Itemplate -I./ -I./lib -fdeclspec -o quickbuild.out -DCOUNTFLOPS -std=c++17

@@ -1,5 +1,4 @@
 #include "precomp.h"
-#include "quickbuild.h"
 #include "tsc_x86.h"
 
 #define FREQUENCY 2.0e9 // disable turbo boost
@@ -9,33 +8,8 @@
 // 3. binning
 // to do: SIMD
 
-static uint seed = 0x12345678;
-uint RandomUInt()
-{
-	seed ^= seed << 13;
-	seed ^= seed >> 17;
-	seed ^= seed << 5;
-	return seed;
-}
-uint RandomUInt( uint& seed )
-{
-	seed ^= seed << 13;
-	seed ^= seed >> 17;
-	seed ^= seed << 5;
-	return seed;
-}
-float Rand( float range ) { return RandomFloat() * range; }
-float RandomFloat() { return RandomUInt() * 2.3283064365387e-10f; }
-float RandomFloat( uint& seed ) { return RandomUInt( seed ) * 2.3283064365387e-10f; }
-
-TheApp* CreateApp() { return new QuickBuildApp(); }
-
-// triangle count
-#define N	50000 // hardcoded for the unity vehicle mesh
-
 // bin count
 #define BINS 8
-#define RANDOM
 
 // forward declarations
 void Subdivide( uint nodeIdx );
@@ -61,7 +35,9 @@ struct aabb
 	}
 };
 struct Bin { aabb bounds; int triCount = 0; };
-__declspec(align(64)) struct Ray
+
+__declspec(align(64)) 
+struct Ray
 {
 	Ray() { O = D = rD = float3(1.0); }
     float3 O; float dummy1;
@@ -70,10 +46,11 @@ __declspec(align(64)) struct Ray
     float t = 1e30f;
 };
 
-// application data
-Tri tri[N];
-uint triIdx[N];
-BVHNode* bvhNode = 0;
+/* dangerous global variable */
+unsigned long long N = 50000;  // triangle count
+Tri* tri;
+uint* triIdx;
+BVHNode* bvhNode;
 uint rootNodeIdx = 0, nodesUsed = 2;
 
 // functions
@@ -308,8 +285,12 @@ void Subdivide( uint nodeIdx )
 	Subdivide( rightChildIdx );
 }
 
-void Init(char* filename, int N)
-{
+void Init(char* filename, int triCount = 50000)
+{	
+	N = triCount;
+	tri = new Tri[N];
+	triIdx = new uint[N];
+	
 	FILE* file = fopen(filename, "r" );
 	for (int t = 0; t < N; t++)
 		fscanf( file, "%f %f %f %f %f %f %f %f %f\n",
@@ -355,8 +336,6 @@ void Tick(float deltaTime)
 // static TheApp* app = 0;
 int main(int argc, char *argv[]) {
 	
-	Init("assets/dragon.tri", 1);
-    // app = CreateApp();
-    // app->Init();
-    // app->Tick(1);
+	Init(argv[1], atoi(argv[2]));
+	Tick(1);
 }

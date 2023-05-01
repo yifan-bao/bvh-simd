@@ -1,5 +1,6 @@
 #include "precomp.h"
 #include "basics.h"
+#define FREQUENCY 2.0e9 // disable turbo boost
 
 static uint seed = 0x12345678;
 uint RandomUInt()
@@ -22,7 +23,7 @@ float RandomFloat() { return RandomUInt() * 2.3283064365387e-10f; }
 float RandomFloat( uint& seed ) { return RandomUInt( seed ) * 2.3283064365387e-10f; }
 
 // triangle count
-#define N	30000 // set it larger to see the effect of the BVH
+#define N	50000 // set it larger to see the effect of the BVH
 
 // forward declarations
 void Subdivide( uint nodeIdx );
@@ -197,8 +198,8 @@ void Subdivide( uint nodeIdx )
 
 void BasicBVHApp::Init()
 {
-
-	FILE* file = fopen( "assets/bigben.tri", "r" );
+	
+	FILE* file = fopen( "assets/dragon.tri", "r" );
 	float a, b, c, d, e, f, g, h, i;
 	for (int t = 0; t < N; t++)
 	{
@@ -209,18 +210,6 @@ void BasicBVHApp::Init()
 		tri[t].vertex2 = float3( g, h, i );
 	}
 	fclose( file );
-
-	// Generate random triangles.
-	// intialize a scene with N random triangles
-	// for (int i = 0; i < N; i++)
-	// {
-	// 	float3 r0 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
-	// 	float3 r1 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
-	// 	float3 r2 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
-	// 	tri[i].vertex0 = r0 * 9 - float3( 5 );
-	// 	tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
-	// }
-	
 	// construct the BVH
 	BuildBVH();
 }
@@ -244,6 +233,7 @@ void BasicBVHApp::Tick( float deltaTime )
 		// if (ray.t < 1e30f) screen->Plot( x, y, 0xffffff );
 	}
 	float elapsed = t.elapsed() * 1000;
+	printf("tracing cycles: %f\n", elapsed/1000 * FREQUENCY );
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
 	#ifdef COUNTFLOPS
 		printf("FLOPS COUNT: %lld flops\n", flopcount);

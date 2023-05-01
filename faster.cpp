@@ -255,19 +255,30 @@ void Subdivide( uint nodeIdx )
 }
 void FasterRaysApp::Init()
 {
-    FILE* file = fopen( "assets/bigben.tri", "r" );
-    float a, b, c, d, e, f, g, h, i;
-    for (int t = 0; t < N; t++)
-    {
-    fscanf( file, "%f %f %f %f %f %f %f %f %f\n",
-    &a, &b, &c, &d, &e, &f, &g, &h, &i );
-    tri[t].vertex0 = float3( a, b, c );
-    tri[t].vertex1 = float3( d, e, f );
-    tri[t].vertex2 = float3( g, h, i );
-    }
-    fclose( file );
-    // construct the BVH
-    BuildBVH();
+	#ifdef RAMDOM_SCENE
+	for (int i = 0; i < N; i++)
+	{
+		float3 r0 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+		float3 r1 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+		float3 r2 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+		tri[i].vertex0 = r0 * 9 - float3( 5 );
+		tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
+	}
+	#else
+	// Generate random triangles.
+	// intialize a scene with N random triangles
+	FILE* file = fopen( "assets/bigben.tri", "r" );
+	for (int t = 0; t < N; t++)
+	{
+		fscanf( file, "%f %f %f %f %f %f %f %f %f\n",
+			&tri[t].vertex0.x, &tri[t].vertex0.y, &tri[t].vertex0.z,
+			&tri[t].vertex1.x, &tri[t].vertex1.y, &tri[t].vertex1.z,
+			&tri[t].vertex2.x, &tri[t].vertex2.y, &tri[t].vertex2.z );
+	}
+	fclose( file );
+	#endif
+	// construct the BVH
+	BuildBVH();
 }
 
 void FasterRaysApp::Tick( float deltaTime )
