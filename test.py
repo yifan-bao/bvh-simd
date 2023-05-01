@@ -10,8 +10,10 @@ for filename in os.listdir(directory):
         args = ['./quickbuild.out', os.path.join(directory, filename), str(len(lines)-1)]
         # # args = ['./quickbuild.out', './assets/dragon.tri', "50000"]
         result = subprocess.run(args, capture_output=True, text=True)
+        if not os.path.exists('./ressult'):
+            os.mkdir('./ressult')
         with open('./result/quickbuild_output.txt', 'a') as f:
+            f.write(filename + '\n')
             f.write(result.stdout)
         # print(result.stdout)
-
         
