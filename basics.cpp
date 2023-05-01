@@ -1,15 +1,6 @@
 #include "precomp.h"
 #include "basics.h"
 
-// THIS SOURCE FILE:
-// Code for the article "How to Build a BVH", part 1: basics. Link:
-// https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics
-// This is bare-bones BVH construction and traversal code, running in
-// a minimalistic framework.
-// Feel free to copy this code to your own framework. Absolutely no
-// rights are reserved. No responsibility is accepted either.
-// For updates, follow me on twitter: @j_bikker.
-
 static uint seed = 0x12345678;
 uint RandomUInt()
 {
@@ -31,7 +22,7 @@ float RandomFloat() { return RandomUInt() * 2.3283064365387e-10f; }
 float RandomFloat( uint& seed ) { return RandomUInt( seed ) * 2.3283064365387e-10f; }
 
 // triangle count
-#define N	64
+#define N	30000 // set it larger to see the effect of the BVH
 
 // forward declarations
 void Subdivide( uint nodeIdx );
@@ -141,7 +132,9 @@ void BuildBVH()
 	root.leftFirst = 0, root.triCount = N;
 	UpdateNodeBounds( rootNodeIdx );
 	// subdivide recursively
+	Timer t;
 	Subdivide( rootNodeIdx );
+	printf( "BVH (%i nodes) constructed in %.2fms.\n", nodesUsed, t.elapsed() * 1000 );
 }
 
 void UpdateNodeBounds( uint nodeIdx )
@@ -205,8 +198,7 @@ void Subdivide( uint nodeIdx )
 void BasicBVHApp::Init()
 {
 
-	// Option 1: Read from triangle files.
-	FILE* file = fopen( "assets/unity.tri", "r" );
+	FILE* file = fopen( "assets/bigben.tri", "r" );
 	float a, b, c, d, e, f, g, h, i;
 	for (int t = 0; t < N; t++)
 	{
@@ -218,7 +210,7 @@ void BasicBVHApp::Init()
 	}
 	fclose( file );
 
-	// Option 2: Generate random triangles.
+	// Generate random triangles.
 	// intialize a scene with N random triangles
 	// for (int i = 0; i < N; i++)
 	// {
@@ -228,6 +220,7 @@ void BasicBVHApp::Init()
 	// 	tri[i].vertex0 = r0 * 9 - float3( 5 );
 	// 	tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
 	// }
+	
 	// construct the BVH
 	BuildBVH();
 }
