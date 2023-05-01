@@ -1,14 +1,41 @@
 #include "precomp.h"
 #include "quickbuild.h"
+#include "tsc_x86.h"
 
+#define FREQUENCY 2.0e9 // disable turbo boost
+// optimization used
+// 1. SAH
+// 2. blocking
+// 3. binning
+// to do: SIMD
+
+static uint seed = 0x12345678;
+uint RandomUInt()
+{
+	seed ^= seed << 13;
+	seed ^= seed >> 17;
+	seed ^= seed << 5;
+	return seed;
+}
+uint RandomUInt( uint& seed )
+{
+	seed ^= seed << 13;
+	seed ^= seed >> 17;
+	seed ^= seed << 5;
+	return seed;
+}
+float Rand( float range ) { return RandomFloat() * range; }
+float RandomFloat() { return RandomUInt() * 2.3283064365387e-10f; }
+float RandomFloat( uint& seed ) { return RandomUInt( seed ) * 2.3283064365387e-10f; }
 
 TheApp* CreateApp() { return new QuickBuildApp(); }
 
 // triangle count
-#define N	30000 // hardcoded for the unity vehicle mesh
+#define N	50000 // hardcoded for the unity vehicle mesh
 
 // bin count
 #define BINS 8
+#define RANDOM
 
 // forward declarations
 void Subdivide( uint nodeIdx );
@@ -281,26 +308,29 @@ void Subdivide( uint nodeIdx )
 	Subdivide( rightChildIdx );
 }
 
-void QuickBuildApp::Init()
+void Init(char* filename, int N)
 {
-	FILE* file = fopen( "assets/bigben.tri", "r" );
+	FILE* file = fopen(filename, "r" );
 	for (int t = 0; t < N; t++)
 		fscanf( file, "%f %f %f %f %f %f %f %f %f\n",
 			&tri[t].vertex0.x, &tri[t].vertex0.y, &tri[t].vertex0.z,
 			&tri[t].vertex1.x, &tri[t].vertex1.y, &tri[t].vertex1.z,
 			&tri[t].vertex2.x, &tri[t].vertex2.y, &tri[t].vertex2.z );
+	fclose( file );
+	// construct the BVH
 	BuildBVH();
 }
 
-void QuickBuildApp::Tick( float deltaTime )
+void Tick(float deltaTime) 
 {
-	// draw the scene
-	// screen->Clear( 0 );
 	float3 p0( -1, 1, 2 ), p1( 1, 1, 2 ), p2( -1, -1, 2 );
 	Ray ray;
+	// myInt64 start, end;
+	// start = start_tsc();
 	Timer t;
 	for (int y = 0; y < SCRHEIGHT; y += 4) for (int x = 0; x < SCRWIDTH; x += 4)
 	{
+		// tiling/blocking
 		for (int v = 0; v < 4; v++) for (int u = 0; u < 4; u++)
 		{
 			ray.O = float3( -1.5f, -0.2f, -2.5f );
@@ -312,15 +342,21 @@ void QuickBuildApp::Tick( float deltaTime )
 		}
 	}
 	float elapsed = t.elapsed() * 1000;
+	// end = stop_tsc(start);
+	// double cycles = (double)end;
+	// printf("tracing cycles: %f\n", cycles );
+	printf("tracing cycles: %f\n", elapsed/1000 * FREQUENCY );
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
 	#ifdef COUNTFLOPS
 	printf("FLOPS COUNT: %lld flops\n", flopcount);
 	#endif
 }
 
-static TheApp* app = 0;
-int main(void) {
-    app = CreateApp();
-    app->Init();
-    app->Tick(1);
+// static TheApp* app = 0;
+int main(int argc, char *argv[]) {
+	
+	Init("assets/dragon.tri", 1);
+    // app = CreateApp();
+    // app->Init();
+    // app->Tick(1);
 }
