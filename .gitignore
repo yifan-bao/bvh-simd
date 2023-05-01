@@ -1,4 +1,6 @@
 .vscode
 .idea
-
+old
+*.out
+*.o
 *.DS_Store
