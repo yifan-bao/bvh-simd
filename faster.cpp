@@ -19,13 +19,13 @@ struct BVHNode
 };
 struct aabb
 {
- float3 bmin = 1e30f, bmax = -1e30f;
- void grow( float3 p ) { bmin = fminf( bmin, p ); bmax = fmaxf( bmax, p ); }
- float area()
- {
-  float3 e = bmax - bmin; // box extent
-  return e.x * e.y + e.y * e.z + e.z * e.x;
- }
+    float3 bmin = 1e30f, bmax = -1e30f;
+    void grow( float3 p ) { bmin = fminf( bmin, p ); bmax = fmaxf( bmax, p ); }
+    float area()
+    {
+        float3 e = bmax - bmin; // box extent
+        return e.x * e.y + e.y * e.z + e.z * e.x;
+    }
 };
 
 // __declspec(align(64))
@@ -52,7 +52,7 @@ void IntersectTri( Ray& ray, const Tri& tri )
     const float3 edge2 = tri.vertex2 - tri.vertex0;    // 3 flops
     const float3 h = cross( ray.D, edge2 );            // 9 flops
     const float a = dot( edge1, h );                   // 5 flops
-    if (a > -0.0001f && a < 0.0001f) {					// 2 flops
+    if (a > -0.0001f && a < 0.0001f) {				   // 2 flops
         #ifdef COUNTFLOPS
             flopcount += 22;
         #endif
@@ -113,7 +113,7 @@ void IntersectBVH( Ray& ray )
         for (uint i = 0; i < node->triCount; i++)
             IntersectTri( ray, tri[triIdx[node->leftFirst + i]] );
         if (stackPtr == 0) break; else node = stack[--stackPtr];
-        continue;
+            continue;
         }
         BVHNode* child1 = &bvhNode[node->leftFirst];
         BVHNode* child2 = &bvhNode[node->leftFirst + 1];
@@ -123,7 +123,7 @@ void IntersectBVH( Ray& ray )
     
         if (dist1 > dist2) { 
             #ifdef COUNTFLOPS
-                flopcount += 25;
+                flopcount += 1;
             #endif
             swap( dist1, dist2 ); swap( child1, child2 ); 
         }
@@ -162,96 +162,96 @@ void BuildBVH()
 void UpdateNodeBounds( uint nodeIdx )
 {
     BVHNode& node = bvhNode[nodeIdx];
-    node.aabbMin = float3( 1e30f );
-    node.aabbMax = float3( -1e30f );
-    for (uint first = node.leftFirst, i = 0; i < node.triCount; i++)
-    {
-    uint leafTriIdx = triIdx[first + i];
-    Tri& leafTri = tri[leafTriIdx];
-    node.aabbMin = fminf( node.aabbMin, leafTri.vertex0 );
-    node.aabbMin = fminf( node.aabbMin, leafTri.vertex1 );
-    node.aabbMin = fminf( node.aabbMin, leafTri.vertex2 );
-    node.aabbMax = fmaxf( node.aabbMax, leafTri.vertex0 );
-    node.aabbMax = fmaxf( node.aabbMax, leafTri.vertex1 );
-    node.aabbMax = fmaxf( node.aabbMax, leafTri.vertex2 );
-    }
+	node.aabbMin = float3( 1e30f );
+	node.aabbMax = float3( -1e30f );
+	for (uint first = node.leftFirst, i = 0; i < node.triCount; i++)
+	{
+		uint leafTriIdx = triIdx[first + i];
+		Tri& leafTri = tri[leafTriIdx];
+		node.aabbMin = fminf( node.aabbMin, leafTri.vertex0 );
+		node.aabbMin = fminf( node.aabbMin, leafTri.vertex1 );
+		node.aabbMin = fminf( node.aabbMin, leafTri.vertex2 );
+		node.aabbMax = fmaxf( node.aabbMax, leafTri.vertex0 );
+		node.aabbMax = fmaxf( node.aabbMax, leafTri.vertex1 );
+		node.aabbMax = fmaxf( node.aabbMax, leafTri.vertex2 );
+	}
 }
 
 float EvaluateSAH( BVHNode& node, int axis, float pos )
 {
     // determine triangle counts and bounds for this split candidate
-    aabb leftBox, rightBox;
-    int leftCount = 0, rightCount = 0;
-    for (uint i = 0; i < node.triCount; i++)
-    {
-    Tri& triangle = tri[triIdx[node.leftFirst + i]];
-    if (triangle.centroid[axis] < pos)
-    {
-    leftCount++;
-    leftBox.grow( triangle.vertex0 );
-    leftBox.grow( triangle.vertex1 );
-    leftBox.grow( triangle.vertex2 );
-    }
-    else
-    {
-    rightCount++;
-    rightBox.grow( triangle.vertex0 );
-    rightBox.grow( triangle.vertex1 );
-    rightBox.grow( triangle.vertex2 );
-    }
-    }
-    float cost = leftCount * leftBox.area() + rightCount * rightBox.area();
-    return cost > 0 ? cost : 1e30f;
+	aabb leftBox, rightBox;
+	int leftCount = 0, rightCount = 0;
+	for (uint i = 0; i < node.triCount; i++)
+	{
+		Tri& triangle = tri[triIdx[node.leftFirst + i]];
+		if (triangle.centroid[axis] < pos)
+		{
+			leftCount++;
+			leftBox.grow( triangle.vertex0 );
+			leftBox.grow( triangle.vertex1 );
+			leftBox.grow( triangle.vertex2 );
+		}
+		else
+		{
+			rightCount++;
+			rightBox.grow( triangle.vertex0 );
+			rightBox.grow( triangle.vertex1 );
+			rightBox.grow( triangle.vertex2 );
+		}
+	}
+	float cost = leftCount * leftBox.area() + rightCount * rightBox.area();
+	return cost > 0 ? cost : 1e30f;
 }
 
 void Subdivide( uint nodeIdx )
 {
     // terminate recursion
-    BVHNode& node = bvhNode[nodeIdx];
-    // determine split axis using SAH
-    int bestAxis = -1;
-    float bestPos = 0, bestCost = 1e30f;
-    for (int axis = 0; axis < 3; axis++) for (uint i = 0; i < node.triCount; i++)
-    {
-    Tri& triangle = tri[triIdx[node.leftFirst + i]];
-    float candidatePos = triangle.centroid[axis];
-    float cost = EvaluateSAH( node, axis, candidatePos );
-    if (cost < bestCost)
-    bestPos = candidatePos, bestAxis = axis, bestCost = cost;
-    }
-    int axis = bestAxis;
-    float splitPos = bestPos;
-    float3 e = node.aabbMax - node.aabbMin; // extent of parent
-    float parentArea = e.x * e.y + e.y * e.z + e.z * e.x;
-    float parentCost = node.triCount * parentArea;
-    if (bestCost >= parentCost) return;
-    // in-place partition
-    int i = node.leftFirst;
-    int j = i + node.triCount - 1;
-    while (i <= j)
-    {
-    if (tri[triIdx[i]].centroid[axis] < splitPos)
-    i++;
-    else
-    swap( triIdx[i], triIdx[j--] );
-    }
-    // abort split if one of the sides is empty
-    int leftCount = i - node.leftFirst;
-    if (leftCount == 0 || leftCount == node.triCount) return;
-    // create child nodes
-    int leftChildIdx = nodesUsed++;
-    int rightChildIdx = nodesUsed++;
-    bvhNode[leftChildIdx].leftFirst = node.leftFirst;
-    bvhNode[leftChildIdx].triCount = leftCount;
-    bvhNode[rightChildIdx].leftFirst = i;
-    bvhNode[rightChildIdx].triCount = node.triCount - leftCount;
-    node.leftFirst = leftChildIdx;
-    node.triCount = 0;
-    UpdateNodeBounds( leftChildIdx );
-    UpdateNodeBounds( rightChildIdx );
-    // recurse
-    Subdivide( leftChildIdx );
-    Subdivide( rightChildIdx );
+	BVHNode& node = bvhNode[nodeIdx];
+	// determine split axis using SAH
+	int bestAxis = -1;
+	float bestPos = 0, bestCost = 1e30f;
+	for (int axis = 0; axis < 3; axis++) for (uint i = 0; i < node.triCount; i++)
+	{
+		Tri& triangle = tri[triIdx[node.leftFirst + i]];
+		float candidatePos = triangle.centroid[axis];
+		float cost = EvaluateSAH( node, axis, candidatePos );
+		if (cost < bestCost)
+			bestPos = candidatePos, bestAxis = axis, bestCost = cost;
+	}
+	int axis = bestAxis;
+	float splitPos = bestPos;
+	float3 e = node.aabbMax - node.aabbMin; // extent of parent
+	float parentArea = e.x * e.y + e.y * e.z + e.z * e.x;
+	float parentCost = node.triCount * parentArea;
+	if (bestCost >= parentCost) return;
+	// in-place partition
+	int i = node.leftFirst;
+	int j = i + node.triCount - 1;
+	while (i <= j)
+	{
+		if (tri[triIdx[i]].centroid[axis] < splitPos)
+			i++;
+		else
+			swap( triIdx[i], triIdx[j--] );
+	}
+	// abort split if one of the sides is empty
+	int leftCount = i - node.leftFirst;
+	if (leftCount == 0 || leftCount == node.triCount) return;
+	// create child nodes
+	int leftChildIdx = nodesUsed++;
+	int rightChildIdx = nodesUsed++;
+	bvhNode[leftChildIdx].leftFirst = node.leftFirst;
+	bvhNode[leftChildIdx].triCount = leftCount;
+	bvhNode[rightChildIdx].leftFirst = i;
+	bvhNode[rightChildIdx].triCount = node.triCount - leftCount;
+	node.leftFirst = leftChildIdx;
+	node.triCount = 0;
+	UpdateNodeBounds( leftChildIdx );
+	UpdateNodeBounds( rightChildIdx );
+	// recurse
+	Subdivide( leftChildIdx );
+	Subdivide( rightChildIdx );
 }
 void FasterRaysApp::Init()
 {
@@ -273,24 +273,28 @@ void FasterRaysApp::Init()
 void FasterRaysApp::Tick( float deltaTime )
 {
     // draw the scene
-    // screen->Clear( 0 );
-    float3 p0( -1, 1, 2 ), p1( 1, 1, 2 ), p2( -1, -1, 2 );
-    Ray ray;
-    Timer t;
-    for (int y = 0; y < SCRHEIGHT; y += 4) for (int x = 0; x < SCRWIDTH; x += 4)
-    {
-    for (int v = 0; v < 4; v++) for (int u = 0; u < 4; u++)
-    {
-    ray.O = float3( -1.5f, -0.2f, -2.5f );
-    float3 pixelPos = ray.O + p0 + (p1 - p0) * ((x + u) / (float)SCRWIDTH) + (p2 - p0) * ((y + v) / (float)SCRHEIGHT);
-    ray.D = normalize( pixelPos - ray.O ), ray.t = 1e30f;
-    ray.rD = float3( 1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z );
-    IntersectBVH( ray );
-    uint c = 500 - (int)(ray.t * 42);
-    }
- }
-    float elapsed = t.elapsed() * 1000;
-    printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
+	// screen->Clear( 0 );
+	float3 p0( -1, 1, 2 ), p1( 1, 1, 2 ), p2( -1, -1, 2 );
+	Ray ray;
+	Timer t;
+	for (int y = 0; y < SCRHEIGHT; y += 4) for (int x = 0; x < SCRWIDTH; x += 4)
+	{
+		for (int v = 0; v < 4; v++) for (int u = 0; u < 4; u++)
+		{
+			ray.O = float3( -1.5f, -0.2f, -2.5f );
+			float3 pixelPos = ray.O + p0 + (p1 - p0) * ((x + u) / (float)SCRWIDTH) + (p2 - p0) * ((y + v) / (float)SCRHEIGHT);
+			ray.D = normalize( pixelPos - ray.O ), ray.t = 1e30f;
+			ray.rD = float3( 1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z );
+			IntersectBVH( ray );
+			
+		}
+	}
+	float elapsed = t.elapsed() * 1000;
+	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
+    
+    #ifdef COUNTFLOPS
+    printf("FLOPS COUNT: %lld flops\n", flopcount);
+	#endif
 }
 
 // find the app implementation

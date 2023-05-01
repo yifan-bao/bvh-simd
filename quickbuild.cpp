@@ -61,7 +61,7 @@ void IntersectTri( Ray& ray, const Tri& tri )
 		#ifdef COUNTFLOPS
 			flopcount += 22;
 		#endif
-		return 
+		return ;
 	}
 	const float f = 1 / a;							// 1 flop
 	const float3 s = ray.O - tri.vertex0;			// 3 flops
@@ -313,6 +313,9 @@ void QuickBuildApp::Tick( float deltaTime )
 	}
 	float elapsed = t.elapsed() * 1000;
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
+	#ifdef COUNTFLOPS
+	printf("FLOPS COUNT: %lld flops\n", flopcount);
+	#endif
 }
 
 static TheApp* app = 0;
