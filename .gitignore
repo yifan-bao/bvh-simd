@@ -4,3 +4,5 @@ old
 *.out
 *.o
 *.DS_Store
+preprocessing
+result
