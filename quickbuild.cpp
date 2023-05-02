@@ -4,9 +4,10 @@
 #define FREQUENCY 2.0e9 // disable turbo boost
 // optimization used
 // 1. SAH
-// 2. blocking
+// 2. blocking for imaging
 // 3. binning
-// to do: SIMD
+// TODO: SIMD, Data Layout, Numerical Issue
+// TODO: Topology Optimization, Spatial Split
 
 // bin count
 #define BINS 8
@@ -47,6 +48,7 @@ struct Ray
 };
 
 /* dangerous global variable */
+// TODO: remove global variable
 unsigned long long N = 50000;  // triangle count
 Tri* tri;
 uint* triIdx;
@@ -157,7 +159,7 @@ void BuildBVH()
 	for (int i = 0; i < N; i++) triIdx[i] = i;
 	// calculate triangle centroids for partitioning
 	for (int i = 0; i < N; i++)
-		tri[i].centroid = (tri[i].vertex0 + tri[i].vertex1 + tri[i].vertex2) * 0.3333f;
+		tri[i].centroid = (tri[i].vertex0 + tri[i].vertex1 + tri[i].vertex2) * 0.3333f; //Strength Reduced
 	// assign all triangles to root node
 	BVHNode& root = bvhNode[rootNodeIdx];
 	root.leftFirst = 0, root.triCount = N;
@@ -177,7 +179,7 @@ void UpdateNodeBounds( uint nodeIdx )
 	{
 		uint leafTriIdx = triIdx[first + i];
 		Tri& leafTri = tri[leafTriIdx];
-		node.aabbMin = fminf( node.aabbMin, leafTri.vertex0 );
+		node.aabbMin = fminf( node.aabbMin, leafTri.vertex0 ); // TODO: inline or use question operator 
 		node.aabbMin = fminf( node.aabbMin, leafTri.vertex1 );
 		node.aabbMin = fminf( node.aabbMin, leafTri.vertex2 );
 		node.aabbMax = fmaxf( node.aabbMax, leafTri.vertex0 );
@@ -205,9 +207,9 @@ float FindBestSplitPlane( BVHNode& node, int& axis, float& splitPos )
 		for (uint i = 0; i < node.triCount; i++)
 		{
 			Tri& triangle = tri[triIdx[node.leftFirst + i]];
-			int binIdx = min( BINS - 1, (int)((triangle.centroid[a] - boundsMin) * scale) );
+			int binIdx = min( BINS - 1, (int)((triangle.centroid[a] - boundsMin) * scale) ); // TODO: do we need the min function?
 			bin[binIdx].triCount++;
-			bin[binIdx].bounds.grow( triangle.vertex0 );
+			bin[binIdx].bounds.grow( triangle.vertex0 ); // TODO: remove the class indirection
 			bin[binIdx].bounds.grow( triangle.vertex1 );
 			bin[binIdx].bounds.grow( triangle.vertex2 );
 		}
@@ -216,7 +218,7 @@ float FindBestSplitPlane( BVHNode& node, int& axis, float& splitPos )
 		int leftCount[BINS - 1], rightCount[BINS - 1];
 		aabb leftBox, rightBox;
 		int leftSum = 0, rightSum = 0;
-		for (int i = 0; i < BINS - 1; i++)
+		for (int i = 0; i < BINS - 1; i++) // TODO: possibly have some problem.
 		{
 			leftSum += bin[i].triCount;
 			leftCount[i] = leftSum;
@@ -254,7 +256,7 @@ void Subdivide( uint nodeIdx )
 	int axis;
 	float splitPos;
 	float splitCost = FindBestSplitPlane( node, axis, splitPos );
-	float nosplitCost = CalculateNodeCost( node );
+	float nosplitCost = CalculateNodeCost( node ); // TODO: binary or wide BVH considering the problem of the wide BVH is that it may contain too many empty slots.
 	if (splitCost >= nosplitCost) return;
 	// in-place partition
 	int i = node.leftFirst;
@@ -272,7 +274,7 @@ void Subdivide( uint nodeIdx )
 	// create child nodes
 	int leftChildIdx = nodesUsed++;
 	int rightChildIdx = nodesUsed++;
-	bvhNode[leftChildIdx].leftFirst = node.leftFirst;
+	bvhNode[leftChildIdx].leftFirst = node.leftFirst; // TODO: how to express the tree in array 
 	bvhNode[leftChildIdx].triCount = leftCount;
 	bvhNode[rightChildIdx].leftFirst = i;
 	bvhNode[rightChildIdx].triCount = node.triCount - leftCount;
@@ -287,16 +289,22 @@ void Subdivide( uint nodeIdx )
 
 void Init(char* filename, int triCount = 50000)
 {	
-	N = triCount;
 	tri = new Tri[N];
 	triIdx = new uint[N];
+    int t;
+    int num = 9;
 	
 	FILE* file = fopen(filename, "r" );
-	for (int t = 0; t < N; t++)
-		fscanf( file, "%f %f %f %f %f %f %f %f %f\n",
+	for (t = 0; t < triCount && num == 9 ; t++) {
+		num = fscanf( file, "%f %f %f %f %f %f %f %f %f\n",
 			&tri[t].vertex0.x, &tri[t].vertex0.y, &tri[t].vertex0.z,
 			&tri[t].vertex1.x, &tri[t].vertex1.y, &tri[t].vertex1.z,
 			&tri[t].vertex2.x, &tri[t].vertex2.y, &tri[t].vertex2.z );
+        if(num != 9) {
+            printf("WRONG\n")
+            exit(1);
+        }
+    }
 	fclose( file );
 	// construct the BVH
 	BuildBVH();
