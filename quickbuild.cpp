@@ -11,6 +11,26 @@
 // bin count
 #define BINS 8
 
+static uint seed = 0x12345678;
+uint RandomUInt()
+{
+	seed ^= seed << 13;
+	seed ^= seed >> 17;
+	seed ^= seed << 5;
+	return seed;
+}
+uint RandomUInt( uint& seed )
+{
+	seed ^= seed << 13;
+	seed ^= seed >> 17;
+	seed ^= seed << 5;
+	return seed;
+}
+
+float Rand( float range ) { return RandomFloat() * range; }
+float RandomFloat() { return RandomUInt() * 2.3283064365387e-10f; }
+float RandomFloat( uint& seed ) { return RandomUInt( seed ) * 2.3283064365387e-10f; }
+
 // forward declarations
 void Subdivide( uint nodeIdx );
 void UpdateNodeBounds( uint nodeIdx );
@@ -130,9 +150,9 @@ void IntersectBVH( Ray& ray )
 		float dist1 = IntersectAABB( ray, child1->aabbMin, child1->aabbMax );
 		float dist2 = IntersectAABB( ray, child2->aabbMin, child2->aabbMax );
 		if (dist1 > dist2) { 
-			#ifdef COUNTFLOPS
-				flopcount += 25;
-			#endif
+			// #ifdef COUNTFLOPS
+			// 	flopcount += 25;
+			// #endif
 			swap( dist1, dist2 ); swap( child1, child2 ); 
 		}
 		if (dist1 == 1e30f)
@@ -285,6 +305,23 @@ void Subdivide( uint nodeIdx )
 	Subdivide( rightChildIdx );
 }
 
+void Init(int triCount = 50000) 
+{	
+	N = triCount;
+	tri = new Tri[N];
+	triIdx = new uint[N];
+	// intialize a scene with N random triangles
+	for (int i = 0; i < N; i++)
+	{
+		float3 r0 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+		float3 r1 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+		float3 r2 = float3( RandomFloat(), RandomFloat(), RandomFloat() );
+		tri[i].vertex0 = r0 * 9 - float3( 5 );
+		tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
+	}
+	BuildBVH();
+}
+
 void Init(char* filename, int triCount = 50000)
 {	
 	N = triCount;
@@ -335,7 +372,9 @@ void Tick(float deltaTime)
 
 // static TheApp* app = 0;
 int main(int argc, char *argv[]) {
-	
-	Init(argv[1], atoi(argv[2]));
+	if(argc == 2) Init(atoi(argv[1])); 
+	else if(argc == 3)
+		Init(argv[1], atoi(argv[2]));
+	else return 1;
 	Tick(1);
 }
