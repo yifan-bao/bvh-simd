@@ -57,7 +57,6 @@ struct aabb
 };
 struct Bin { aabb bounds; int triCount = 0; };
 
-__declspec(align(64)) 
 struct Ray
 {
 	Ray() { O = D = rD = float3(1.0); }
@@ -65,7 +64,7 @@ struct Ray
     float3 D; float dummy2;
     float3 rD; float dummy3;
     float t = 1e30f;
-};
+}; __attribute__ ((aligned (64)))
 
 /* dangerous global variable */
 // TODO: remove global variable
@@ -326,7 +325,9 @@ void Init(int triCount = 50000)
 
 void Init(char* filename, int triCount = 50000)
 {	
+    N = triCount;
 	tri = new Tri[N];
+    tri[N-1].vertex0.x = 0;
 	triIdx = new uint[N];
     int t;
     int num = 9;
@@ -338,7 +339,7 @@ void Init(char* filename, int triCount = 50000)
 			&tri[t].vertex1.x, &tri[t].vertex1.y, &tri[t].vertex1.z,
 			&tri[t].vertex2.x, &tri[t].vertex2.y, &tri[t].vertex2.z );
         if(num != 9) {
-            printf("WRONG\n")
+            printf("WRONG\n");
             exit(1);
         }
     }

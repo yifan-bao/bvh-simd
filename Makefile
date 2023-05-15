@@ -1,5 +1,5 @@
 CXX=g++
-CXXFLAGS=-Itemplate -I./ -I./lib
+CXXFLAGS=-Itemplate -I./ -I./lib -g -O3
 SRCS=quickbuild.cpp
 OBJS=$(SRCS:.cpp=.o)
 EXEC=quickbuild.out
@@ -7,10 +7,10 @@ EXEC=quickbuild.out
 all: $(EXEC)
 
 $(EXEC): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $(EXEC)
+	$(CXX) $(CXXFLAGS) -v $(OBJS) -o $(EXEC)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@ -fdeclspec -DCOUNTFLOPS -std=c++17
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -DCOUNTFLOPS -std=c++17
 
 clean:
 	rm -f $(OBJS) $(EXEC)
