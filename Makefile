@@ -1,17 +1,40 @@
-CXX=g++
-CXXFLAGS=-Itemplate -I./ -I./lib -g -O3
-SRCS=quickbuild.cpp
-OBJS=$(SRCS:.cpp=.o)
-EXEC=quickbuild.out
+CC = gcc
+CFLAGS = -Wall -Wextra -g
+SRCDIR = src
+OBJDIR = obj
+BINDIR = bin
 
-all: $(EXEC)
+SRCS = $(wildcard $(SRCDIR)/*.c)
+OBJS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
+COUNT_TARGET = $(BINDIR)/program_count
+NON_COUNT_TARGET = $(BINDIR)/program_noncount
 
-$(EXEC): $(OBJS)
-	$(CXX) $(CXXFLAGS) -v $(OBJS) -o $(EXEC)
+.PHONY: all clean count non-count
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@ -DCOUNTFLOPS -std=c++17
+all: count
+
+count: CFLAGS += -DCOUNT
+count: $(COUNT_TARGET)
+	@echo "Running with count..."
+	@./$(COUNT_TARGET)
+
+non-count: $(NON_COUNT_TARGET)
+	@echo "Running without count..."
+	@./$(NON_COUNT_TARGET)
+
+$(COUNT_TARGET): $(OBJS)
+	@mkdir -p $(BINDIR)
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(NON_COUNT_TARGET): $(OBJS)
+	@mkdir -p $(BINDIR)
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.c $(SRCDIR)/bvh.h $(SRCDIR)/common.h $(SRCDIR)/utils.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(OBJDIR):
+	@mkdir -p $(OBJDIR)
 
 clean:
-	rm -f $(OBJS) $(EXEC)
-
+	rm -rf $(OBJDIR) $(BINDIR)

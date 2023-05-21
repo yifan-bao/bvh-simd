@@ -6,3 +6,6 @@ old
 *.DS_Store
 preprocessing
 result
+
+bin
+obj

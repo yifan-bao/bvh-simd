@@ -1,9 +1,12 @@
 #pragma once
 
 #include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
 
 typedef unsigned int uint;
 typedef long long ll;
+typedef unsigned long long ull;
 
 // macro
 #define SCRWIDTH	1024
@@ -38,6 +41,8 @@ float float3_at(float3 a, int i) {
   if (i == 0) return a.x;
   if (i == 1) return a.y;
   if (i == 2) return a.z;
+  printf("float3_at error\n");
+  return 0;
 }
 
 
@@ -91,25 +96,25 @@ float dot(const float3 a, const float3 b ) {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-float3 normalize(const float3 &v) {
+float3 normalize(const float3 v) {
   float invLen = rsqrtf(dot(v, v));
-  return v *invLen;
+  return MulConstFloat3(v, invLen);
 }
 
 // random
 uint seed = 0x12345678;
-uint RandomUInt() {
+uint RandomUInt(void) {
   seed ^= seed << 13;
   seed ^= seed >> 17;
   seed ^= seed << 5;
   return seed;
 }
-uint RandomUInt(uint seed) {
+uint RandomUIntSeed(uint seed) {
   seed ^= seed << 13;
   seed ^= seed >> 17;
   seed ^= seed << 5;
   return seed;
 }
-float RandomFloat() { return RandomUInt() * 2.3283064365387e-10f; }
-float RandomFloat(uint seed) { return RandomUInt(seed) * 2.3283064365387e-10f; }
+float RandomFloat(void) { return RandomUInt() * 2.3283064365387e-10f; }
+float RandomFloatSeed(uint seed) { return RandomUIntSeed(seed) * 2.3283064365387e-10f; }
 float Rand(float range) { return RandomFloat() * range; }

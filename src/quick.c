@@ -1,4 +1,5 @@
 #include "bvh.h"
+#include "utils.h"
 
 #define FREQUENCY 2.0e9  // disable turbo boost
 // optimization used
@@ -19,7 +20,7 @@ typedef struct {
   BVHNode *bvhNode;
   uint rootNodeIdx;
   uint nodesUsed;
-  unsigned long long N;
+  ull N;
 } BVHTree;
 
 // forward declarations
@@ -61,7 +62,7 @@ void IntersectTri(Ray *ray, const Tri *tri) {
 
   const float t = f * dot(edge2, q);    // 6 flops
   if (t > 0.0001f) {                    // 1 flop
-    ray->t = min(ray->t, t);            // 1 flop
+    ray->t = fmin(ray->t, t);            // 1 flop
 #ifdef COUNTFLOPS
     flopcount += 60;
 #endif
@@ -73,27 +74,27 @@ void IntersectTri(Ray *ray, const Tri *tri) {
 #endif
 }
 
-inline float IntersectAABB(const Ray *ray, const float3 bmin, const float3 bmax) {
+float IntersectAABB(const Ray *ray, const float3 bmin, const float3 bmax) {
 #ifdef COUNTFLOPS
   flopcount += 25;
 #endif
   float tx1 = (bmin.x - ray->O.x) * ray->rD.x;
   float tx2 = (bmax.x - ray->O.x) * ray->rD.x;
 
-  float tmin = min(tx1, tx2);
-  float tmax = max(tx1, tx2);
+  float tmin = fmin(tx1, tx2);
+  float tmax = fmax(tx1, tx2);
   
   float ty1 = (bmin.y - ray->O.y) * ray->rD.y;
   float ty2 = (bmax.y - ray->O.y) * ray->rD.y;
 
-  tmin = max(tmin, min(ty1, ty2));
-  tmax = min(tmax, max(ty1, ty2));
+  tmin = fmax(tmin, fmin(ty1, ty2));
+  tmax = fmin(tmax, fmax(ty1, ty2));
   
   float tz1 = (bmin.z - ray->O.z) * ray->rD.z;
   float tz2 = (bmax.z - ray->O.z) * ray->rD.z;
   
-  tmin = max(tmin, min(tz1, tz2));
-  tmax = min(tmax, max(tz1, tz2));
+  tmin = fmax(tmin, fmin(tz1, tz2));
+  tmax = fmin(tmax, fmax(tz1, tz2));
   
   if (tmax >= tmin && tmin < ray->t && tmax > 0)
     return tmin;
@@ -106,7 +107,7 @@ void IntersectBVH(BVHTree *tree, Ray *ray) {
   BVHNode *stack[64];
   uint stackPtr = 0;
   while (1) {
-    if (BVHNodeIsLeaf(&node)) {
+    if (BVHNodeIsLeaf(node)) {
       for (uint i = 0; i < node->triCount; i++) {
         IntersectTri(ray, tree->tri + tree->triIdx[node->leftFirst + i]);
       }
@@ -123,8 +124,8 @@ void IntersectBVH(BVHTree *tree, Ray *ray) {
     float dist1 = IntersectAABB(ray, child1->aabbMin, child1->aabbMax);
     float dist2 = IntersectAABB(ray, child2->aabbMin, child2->aabbMax);
     if (dist1 > dist2) {
-      swap(dist1, dist2);
-      swap(child1, child2);
+      swap_float(&dist1, &dist2);
+      swap_bvhnode(child1, child2);
     }
     if (dist1 == 1e30f) {
       if (stackPtr == 0)
@@ -144,11 +145,11 @@ void BuildBVH(BVHTree *tree) {
   tree->bvhNode = (BVHNode*)aligned_alloc(64, sizeof(BVHNode) * tree->N * 2);
 
   // populate triangle index array
-  for (int i = 0; i < tree->N; i++)
+  for (ull i = 0; i < tree->N; i++)
     tree->triIdx[i] = i;
   
   // calculate triangle centroids for partitioning
-  for (int i = 0; i < tree->N; i++) {
+  for (ull i = 0; i < tree->N; i++) {
     // Strength Reduced
     Tri *tri = tree->tri + i;
     tri->centroid = AddFloat3(AddFloat3(tri->vertex0, tri->vertex1), tri->vertex2);
@@ -190,8 +191,8 @@ float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPo
     float boundsMin = 1e30f, boundsMax = -1e30f;
     for (uint i = 0; i < node->triCount; i++) {
       Tri *triangle = tree->tri + tree->triIdx[node->leftFirst + i];
-      boundsMin = min(boundsMin, float3_at(triangle->centroid, a));
-      boundsMax = max(boundsMax, float3_at(triangle->centroid, a));
+      boundsMin = fmin(boundsMin, float3_at(triangle->centroid, a));
+      boundsMax = fmax(boundsMax, float3_at(triangle->centroid, a));
     }
     if (boundsMin == boundsMax) continue;
     // populate the bins
@@ -202,7 +203,7 @@ float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPo
     float scale = BINS / (boundsMax - boundsMin);
     for (uint i = 0; i < node->triCount; i++) {
       Tri *triangle = tree->tri + tree->triIdx[node->leftFirst + i];
-      int binIdx = min(BINS - 1, (int)((float3_at(triangle->centroid, a) - boundsMin) * scale));  // TODO: do we need the min function?
+      int binIdx = min_int(BINS - 1, (int)((float3_at(triangle->centroid, a) - boundsMin) * scale));  // TODO: do we need the min function?
       bin[binIdx].triCount++;
       AABBGrow(&bin[binIdx].bounds, &triangle->vertex0);
       AABBGrow(&bin[binIdx].bounds, &triangle->vertex1);
@@ -257,20 +258,20 @@ void Subdivide(BVHTree *tree, uint nodeIdx) {
   float nosplitCost = CalculateNodeCost(node);
   if (splitCost >= nosplitCost) return;
   // in-place partition
-  int i = node->leftFirst;
-  int j = i + node->triCount - 1;
+  uint i = node->leftFirst;
+  uint j = i + node->triCount - 1;
   while (i <= j) {
     if (float3_at(tree->tri[tree->triIdx[i]].centroid, axis) < splitPos)
       i++;
     else
-      swap(tree->triIdx[i], tree->triIdx[j--]);
+      swap_uint(tree->triIdx + i, tree->triIdx + j--);
   }
   // abort split if one of the sides is empty
-  int leftCount = i - node->leftFirst;
+  uint leftCount = i - node->leftFirst;
   if (leftCount == 0 || leftCount == node->triCount) return;
   // create child nodes
-  int leftChildIdx = tree->nodesUsed++;
-  int rightChildIdx = tree->nodesUsed++;
+  uint leftChildIdx = tree->nodesUsed++;
+  uint rightChildIdx = tree->nodesUsed++;
   // TODO: how to express the tree in array
   tree->bvhNode[leftChildIdx].leftFirst = node->leftFirst;
   tree->bvhNode[leftChildIdx].triCount = leftCount;
@@ -291,7 +292,7 @@ void InitRandom(BVHTree* tree, int triCount) {
   tree->tri = malloc(tree->N * sizeof(Tri));
   tree->triIdx = malloc(tree->N * sizeof(uint));
   // intialize a scene with N random triangles
-  for (int i = 0; i < tree->N; i++) {
+  for (ull i = 0; i < tree->N; i++) {
     float3 r0 = make_float3_3(RandomFloat(), RandomFloat(), RandomFloat());
     float3 r1 = make_float3_3(RandomFloat(), RandomFloat(), RandomFloat());
     float3 r2 = make_float3_3(RandomFloat(), RandomFloat(), RandomFloat());

@@ -2,7 +2,6 @@
 
 #include "common.h"
 
-
 // Triangle struct
 typedef struct {
   float3 vertex0, vertex1, vertex2;
