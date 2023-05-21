@@ -350,9 +350,12 @@ void Init(BVHTree *tree, char* filename) {
 
 
 void Tick(BVHTree *tree) {
-  float3 p0 = make_float3_3(-1, 1, 2);
-  float3 p1 = make_float3_3(1, 1, 2);
-  float3 p2 = make_float3_3(-1, -1, 2);
+  // save the 3d visual image to a file
+	FILE* writefile = fopen("dragon.vis", "w");
+
+  float3 p0 = make_float3_3(100, -100, -40);
+  float3 p1 = make_float3_3(100, 100, -40);
+  float3 p2 = make_float3_3(-100, -100, -40);
 
   Ray ray;
   RayInit(&ray);
@@ -361,7 +364,7 @@ void Tick(BVHTree *tree) {
       // tiling/blocking
       for (int v = 0; v < 4; v++)
         for (int u = 0; u < 4; u++) {
-          ray.O = make_float3_3(-1.5f, -0.2f, -2.5f);
+          ray.O = make_float3_3(0.0f, 0.0f, 200.0f);
           // float3 pixelPos = ray.O + p0 + (p1 - p0) * ((x + u) / (float)SCRWIDTH) + (p2 - p0) * ((y + v) / (float)SCRHEIGHT);
           float3 pixelPos = AddFloat3(ray.O, p0);
           pixelPos = AddFloat3(pixelPos, MulConstFloat3(SubFloat3(p1, p0), (x + u) / (float)SCRWIDTH));
@@ -371,6 +374,12 @@ void Tick(BVHTree *tree) {
           ray.t = 1e30f;
           ray.rD = make_float3_3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
           IntersectBVH(tree, &ray);
+          if (ray.t < 1e30f) {
+            float3 point = comp_targetpoint(ray.O, ray.D, ray.t);
+            fprintf(writefile, "%f %f %f\n", point.x, point.y, point.z);
+          } else {
+            printf("no intersection\n");
+          }
         }
     }
   }

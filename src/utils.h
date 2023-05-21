@@ -41,3 +41,15 @@ void swap_bvhnode(BVHNode *a, BVHNode *b) {
     *a = *b;
     *b = temp;
 }
+
+
+// utils
+float3 comp_targetpoint(float3 O, float3 D, float t)
+{
+	float3 point;
+	point.x = O.x + t * D.x;
+	point.y = O.y + t * D.y;
+	point.z = O.z + t * D.z;
+	
+	return point;
+}
