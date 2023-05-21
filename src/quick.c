@@ -303,28 +303,51 @@ void InitRandom(BVHTree* tree, int triCount) {
   BuildBVH(tree);
 }
 
-void Init(BVHTree *tree, char* filename, int triCount) {
+
+void Init(BVHTree *tree, char* filename) {
+  int triCount = 0;  // Initialize triangle count
+
+  // Count the number of triangles in the file
+  FILE* countFile = fopen(filename, "r");
+  if (countFile == NULL) {
+    printf("Failed to open file: %s\n", filename);
+    exit(1);
+  }
+
+  float dummy;
+  while (fscanf(countFile, "%f %f %f %f %f %f %f %f %f\n", &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy) == 9) {
+    triCount++;
+  }
+  fclose(countFile);
+
+  printf("Number of triangles: %d in file %s\n", triCount, filename);
+
+  // Allocate memory for triangles and triangle indices
   tree->N = triCount;
   tree->tri = malloc(tree->N * sizeof(Tri));
-  tree->tri[tree->N - 1].vertex0.x = 0;
   tree->triIdx = malloc(tree->N * sizeof(uint));
-  
-  int t;
-  int num = 9;
+
+  // Read triangle data from file
   FILE* file = fopen(filename, "r");
-  for (t = 0; t < triCount && num == 9; t++) {
-    num = fscanf(file, "%f %f %f %f %f %f %f %f %f\n", &tree->tri[t].vertex0.x, &tree->tri[t].vertex0.y, &tree->tri[t].vertex0.z,
-                 &tree->tri[t].vertex1.x, &tree->tri[t].vertex1.y, &tree->tri[t].vertex1.z, &tree->tri[t].vertex2.x, &tree->tri[t].vertex2.y,
-                 &tree->tri[t].vertex2.z);
-    if (num != 9) {
-      printf("file format wrong\n");
+  if (file == NULL) {
+    printf("Failed to open file: %s\n", filename);
+    exit(1);
+  }
+
+  for (int t = 0; t < triCount; t++) {
+    if (fscanf(file, "%f %f %f %f %f %f %f %f %f\n", &tree->tri[t].vertex0.x, &tree->tri[t].vertex0.y, &tree->tri[t].vertex0.z,
+               &tree->tri[t].vertex1.x, &tree->tri[t].vertex1.y, &tree->tri[t].vertex1.z, &tree->tri[t].vertex2.x, &tree->tri[t].vertex2.y,
+               &tree->tri[t].vertex2.z) != 9) {
+      printf("File format is incorrect\n");
       exit(1);
     }
   }
   fclose(file);
-  // construct the BVH
+
+  // Construct the BVH
   BuildBVH(tree);
 }
+
 
 void Tick(BVHTree *tree) {
   float3 p0 = make_float3_3(-1, 1, 2);
@@ -370,12 +393,17 @@ int main(int argc, char* argv[]) {
     .nodesUsed = 2,
   };
 
-  if (argc == 2)
-    InitRandom(&tree, atoi(argv[1]));
-  else if (argc == 3)
-    Init(&tree, argv[1], atoi(argv[2]));
-  else
+  // quick random triNum
+  if (argc == 3)
+    InitRandom(&tree, atoi(argv[2]));
+  // quick filename
+  else if (argc == 2)
+    Init(&tree, argv[1]);
+  else {
+    printf("Usage: %s <filename>\n", argv[0]);
+    printf("or     %s random <triNum>\n", argv[0]);
     return 1;
-  
+  }
+
   Tick(&tree);
 }

@@ -1,26 +1,26 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -O3
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
 
 SRCS = $(wildcard $(SRCDIR)/*.c)
 OBJS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
-COUNT_TARGET = $(BINDIR)/program_count
-NON_COUNT_TARGET = $(BINDIR)/program_noncount
+COUNT_TARGET = $(BINDIR)/quick_count
+NON_COUNT_TARGET = $(BINDIR)/quick
 
 .PHONY: all clean count non-count
 
-all: count
+all: non-count
 
 count: CFLAGS += -DCOUNT
 count: $(COUNT_TARGET)
-	@echo "Running with count..."
-	@./$(COUNT_TARGET)
+	@echo "Building with count..."	
+# @./$(COUNT_TARGET)
 
 non-count: $(NON_COUNT_TARGET)
-	@echo "Running without count..."
-	@./$(NON_COUNT_TARGET)
+	@echo "Building without count..."
+# @./$(NON_COUNT_TARGET)
 
 $(COUNT_TARGET): $(OBJS)
 	@mkdir -p $(BINDIR)
