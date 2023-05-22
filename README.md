@@ -23,6 +23,19 @@ Run:
 - `./bin/quick_count` for counting version
 
 for both `./bin/quick` and `./bin/quick_count`, you can
-- specify the input file by adding the file name after the command, e.g. `./bin/quick assets/dragon.tri`
-- generate a random input file by adding `random` after the command followed by tri number, e.g. `./bin/quick random <trinumber>`
+- specify the input file by adding `-f` after the command followed by the file name, e.g. `./bin/quick -f assets/dragon.tri`
+- generate a random input file by adding `-t` after the command followed by tri number, e.g. `./bin/quick -t <trinumber>`
+
+```bash
+$ ./bin/quick -h
+
+Usage: quick [options]
+ASL Team09 Project: BVH.
+
+    -h, --help                show this help message and exit
+    -t, --trinumber=<int>     random trinumber
+    -v, --valid               validate the result
+    -f, --file=<str>          read from tri file
+    -s, --save=<str>          save result to file
+```
 

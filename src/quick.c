@@ -1,5 +1,10 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "bvh.h"
 #include "utils.h"
+#include "argparse.h"
 
 #define FREQUENCY 2.0e9  // disable turbo boost
 // optimization used
@@ -12,7 +17,14 @@
 // bin count
 #define BINS 8
 
-// global variables
+// Config
+typedef struct {
+  int trinumber;
+  int doValid;
+  const char *path;
+  const char *save_path;
+} Config;
+
 // TODO(xiaoyuan) init these variables
 typedef struct {
   Tri *tri;
@@ -304,7 +316,7 @@ void InitRandom(BVHTree* tree, int triCount) {
 }
 
 
-void Init(BVHTree *tree, char* filename) {
+void Init(BVHTree *tree, const char* filename) {
   int triCount = 0;  // Initialize triangle count
 
   // Count the number of triangles in the file
@@ -349,9 +361,12 @@ void Init(BVHTree *tree, char* filename) {
 }
 
 
-void Tick(BVHTree *tree) {
+void Tick(BVHTree *tree, Config *config) {
   // save the 3d visual image to a file
-	FILE* writefile = fopen("dragon.vis", "w");
+	FILE* writefile;
+  if (config->save_path != NULL) {
+    writefile = fopen(config->save_path, "w");
+  }
 
   float3 p0 = make_float3_3(100, -100, -40);
   float3 p1 = make_float3_3(100, 100, -40);
@@ -374,15 +389,17 @@ void Tick(BVHTree *tree) {
           ray.t = 1e30f;
           ray.rD = make_float3_3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
           IntersectBVH(tree, &ray);
+          // TODO(xiaoyuan!): add a debug mode, to avoid such code affecting performance
+          if (config->save_path == NULL)
+            continue;
           if (ray.t < 1e30f) {
             float3 point = comp_targetpoint(ray.O, ray.D, ray.t);
             fprintf(writefile, "%f %f %f\n", point.x, point.y, point.z);
-          } else {
-            printf("no intersection\n");
           }
         }
     }
   }
+
   // TODO(xiaoyuan): time here
   // printf("tracing cycles: %f\n", cycles );
   // printf("tracing cycles: %f\n", elapsed / 1000 * FREQUENCY);
@@ -390,9 +407,52 @@ void Tick(BVHTree *tree) {
 #ifdef COUNTFLOPS
   printf("FLOPS COUNT: %lld flops\n", flopcount);
 #endif
+
+  if (config->save_path != NULL) {
+    fclose(writefile);
+  }
 }
 
-int main(int argc, char* argv[]) {
+void InitOptions(Config *config) {
+  config->trinumber = 0;
+  config->doValid = 0;
+  config->path = NULL;
+  config->save_path = NULL;
+}
+
+int parse(Config *config, int argc, const char **argv) {
+  static const char *const usages[] = {
+#ifdef COUNTFLOPS
+    "quick_count [options]",
+#else
+    "quick [options]",
+#endif
+    NULL,
+  };
+
+  struct argparse_option options[] = {
+      OPT_HELP(),
+      OPT_INTEGER('t', "trinumber", &config->trinumber, "random trinumber", NULL, 0, 0),
+      OPT_BOOLEAN('v', "valid", &config->doValid, "validate the result", NULL, 0, 0),
+      OPT_STRING('f', "file", &config->path, "read from tri file", NULL, 0, 0),
+      OPT_STRING('s', "save", &config->save_path, "save result to file", NULL, 0, 0),
+      OPT_END(),
+  };
+
+  struct argparse argparse;
+  argparse_init(&argparse, options, usages, 0);
+  argparse_describe(&argparse, "ASL Team09 Project: BVH.", NULL);
+  argc = argparse_parse(&argparse, argc, argv);
+  if (config->trinumber != 0) printf("[Config] trinumber: %d\n", config->trinumber);
+  if (config->doValid != 0) printf("[Config] doValid: %d\n", config->doValid);
+  if (config->path != NULL) printf("[Config] path: %s\n", config->path);
+  if (config->save_path != NULL) printf("[Config] save_path: %s\n", config->save_path);
+  return 0;
+}
+
+int main(int argc, const char* argv[]) {
+  const char *bin_name = argv[0];
+
   BVHTree tree = {
     .N = 0,
     .bvhNode = NULL,
@@ -402,17 +462,20 @@ int main(int argc, char* argv[]) {
     .nodesUsed = 2,
   };
 
-  // quick random triNum
-  if (argc == 3)
-    InitRandom(&tree, atoi(argv[2]));
-  // quick filename
-  else if (argc == 2)
-    Init(&tree, argv[1]);
-  else {
-    printf("Usage: %s <filename>\n", argv[0]);
-    printf("or     %s random <triNum>\n", argv[0]);
+  // parse options
+  Config config;
+  InitOptions(&config);
+  parse(&config, argc, argv);
+
+  if (config.path != NULL) {
+    Init(&tree, config.path);
+  } else if (config.trinumber != 0) {
+    InitRandom(&tree, config.trinumber);
+  } else {
+    printf("Usage (file mode): %s -f <filename>\n", bin_name);
+    printf("or (random mode):  %s -t <triname>\n", bin_name);
     return 1;
   }
 
-  Tick(&tree);
+  Tick(&tree, &config);
 }
