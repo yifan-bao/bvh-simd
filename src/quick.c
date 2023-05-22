@@ -394,7 +394,9 @@ void Tick(BVHTree *tree, Config *config) {
             continue;
           if (ray.t < 1e30f) {
             float3 point = comp_targetpoint(ray.O, ray.D, ray.t);
-            fprintf(writefile, "%f %f %f\n", point.x, point.y, point.z);
+            fprintf(writefile, "%d %d %f %f %f\n", x + u, y + v, point.x, point.y, point.z);
+          } else {
+            fprintf(writefile, "%d %d\n", x + u, y + v);
           }
         }
     }

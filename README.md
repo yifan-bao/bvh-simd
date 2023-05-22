@@ -39,3 +39,13 @@ ASL Team09 Project: BVH.
     -s, --save=<str>          save result to file
 ```
 
+## Validation and Test
+
+### Validation
+
+```bash
+python valid.py [<version_name(default=quick)>]
+
+# e.g.
+python valid.py quick
+```
