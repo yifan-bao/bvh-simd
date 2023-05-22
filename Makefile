@@ -13,7 +13,7 @@ NON_COUNT_TARGET = $(BINDIR)/quick
 
 all: non-count
 
-count: CFLAGS += -DCOUNT
+count: CFLAGS += -DCOUNTFLOPS
 count: $(COUNT_TARGET)
 	@echo "Building with count..."	
 # @./$(COUNT_TARGET)
