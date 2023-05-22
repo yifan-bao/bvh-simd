@@ -5,6 +5,7 @@
 #include "bvh.h"
 #include "utils.h"
 #include "argparse.h"
+#include "tsc_x86.h"
 
 #define FREQUENCY 2.0e9  // disable turbo boost
 // optimization used
@@ -152,6 +153,14 @@ void IntersectBVH(BVHTree *tree, Ray *ray) {
 }
 
 void BuildBVH(BVHTree *tree) {
+#ifdef COUNTFLOPS
+  printf("before build flops: %lld\n", flopcount);
+#endif
+
+  // time
+  myInt64 build_start, build_end;
+  build_start = start_tsc();
+
   // create the BVH node pool
   // bvhNode = (BVHNode*)_aligned_malloc( sizeof( BVHNode ) * N * 2, 64 );
   tree->bvhNode = (BVHNode*)aligned_alloc(64, sizeof(BVHNode) * tree->N * 2);
@@ -178,6 +187,13 @@ void BuildBVH(BVHTree *tree) {
   Subdivide(tree, tree->rootNodeIdx);
   
   // TODO(xiaoyuan) time here
+  build_end = stop_tsc(build_start);
+  double cycles = (double) build_end;
+  printf("build cycles: %f\n", cycles);
+#ifdef COUNTFLOPS
+  printf("build flops: %lld\n", flopcount);
+#endif
+  printf("BVH tree built with %d nodes\n", tree->nodesUsed);
 }
 
 void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
@@ -361,7 +377,7 @@ void Init(BVHTree *tree, const char* filename) {
 }
 
 
-void Tick(BVHTree *tree, Config *config) {
+void Traverse(BVHTree *tree, Config *config) {
   // save the 3d visual image to a file
 	FILE* writefile;
   if (config->save_path != NULL) {
@@ -374,6 +390,14 @@ void Tick(BVHTree *tree, Config *config) {
 
   Ray ray;
   RayInit(&ray);
+
+  // time
+#ifdef COUNTFLOPS
+  printf("before traverse flops: %lld\n", flopcount);
+#endif
+  myInt64 traverse_start, traverse_end;
+  traverse_start = start_tsc();
+
   for (int y = 0; y < SCRHEIGHT; y += 4) {
     for (int x = 0; x < SCRWIDTH; x += 4) {
       // tiling/blocking
@@ -402,10 +426,9 @@ void Tick(BVHTree *tree, Config *config) {
     }
   }
 
-  // TODO(xiaoyuan): time here
-  // printf("tracing cycles: %f\n", cycles );
-  // printf("tracing cycles: %f\n", elapsed / 1000 * FREQUENCY);
-  // printf("tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr(630) / elapsed);
+  traverse_end = stop_tsc(traverse_start);
+  double cycles = (double) traverse_end;
+  printf("traverse cycles: %f\n", cycles);
 #ifdef COUNTFLOPS
   printf("FLOPS COUNT: %lld flops\n", flopcount);
 #endif
@@ -479,5 +502,5 @@ int main(int argc, const char* argv[]) {
     return 1;
   }
 
-  Tick(&tree, &config);
+  Traverse(&tree, &config);
 }
