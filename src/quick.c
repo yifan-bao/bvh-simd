@@ -129,21 +129,20 @@ void IntersectTri(Ray *ray, uint triCount,  __m256 vector0_x, __m256 vector0_y, 
     temp_t = _mm256_min_ps(temp_t, t); // get the minimum
 
     // reduce to one min back. Try to avoid memory access
-    // temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(2, 3, 0, 1)));
-    // temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(1, 0, 3, 2)));
-    // temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
-    // temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(0, 1, 2, 3)));
-    // temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
-    // ray->t = _mm256_cvtss_f32(temp_t); // store the minimum to ray->t
+    temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(2, 3, 0, 1)));
+    temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(1, 0, 3, 2)));
+    temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
+    temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(0, 1, 2, 3)));
+    temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
+    ray->t = _mm256_cvtss_f32(temp_t); // store the minimum to ray->t
 
     // another reduce method
-    __m128 low = _mm256_castps256_ps128(temp_t);
-    __m128 high = _mm256_extractf128_ps(temp_t, 1);
-    __m128 min_4 = _mm_max_ps(low, high);
-    __m128 min_2 = _mm_min_ps(min_4, _mm_shuffle_ps(min_4, min_4, _MM_SHUFFLE(1, 0, 3, 2)));
-    __m128 min_1 = _mm_min_ss(min_2, _mm_shuffle_ps(min_2, min_2, _MM_SHUFFLE(0, 3, 2, 1)));
-    _mm_store_ss(&(ray->t), min_1);
-
+    // __m128 low = _mm256_castps256_ps128(temp_t);
+    // __m128 high = _mm256_extractf128_ps(temp_t, 1);
+    // __m128 min_4 = _mm_max_ps(low, high);
+    // __m128 min_2 = _mm_min_ps(min_4, _mm_shuffle_ps(min_4, min_4, _MM_SHUFFLE(1, 0, 3, 2)));
+    // __m128 min_1 = _mm_min_ss(min_2, _mm_shuffle_ps(min_2, min_2, _MM_SHUFFLE(0, 3, 2, 1)));
+    // _mm_store_ss(&(ray->t), min_1);
 }
 
 // Intersect with 2 aabb boxes (adjacent child)
@@ -161,7 +160,6 @@ void IntersectAABB_AVX(const Ray *ray, __m256 bmin8, __m256 bmax8, float* dist1,
     __m256 t2 = _mm256_mul_ps(_mm256_sub_ps(_mm256_and_ps(bmax8, mask8), ray_O8), ray_rD8);
     __m256 vmax8 = _mm256_max_ps(t1, t2), vmin8 = _mm256_min_ps(t1, t2);
 
-    
     // TODO(yifan): change the lazy implementation. Try to not use __m128
     __m128 vmax4 = _mm256_extractf128_ps(vmax8, 0);
     __m128 vmin4 = _mm256_extractf128_ps(vmin8, 0);
@@ -259,6 +257,7 @@ void BuildBVH(BVHTree *tree) {
   build_start = start_tsc();
 
   // create the BVH node pool
+  // bvhNode = (BVHNode*)_aligned_malloc( sizeof( BVHNode ) * N * 2, 64 );
   tree->bvhNode = (BVHNode*)aligned_alloc(64, sizeof(BVHNode) * tree->N * 2);
 
   // populate triangle index array SIMD
@@ -266,14 +265,14 @@ void BuildBVH(BVHTree *tree) {
   uint index;
   for(index = 0; index < tree->N-7; index += 8) {
     _mm256_storeu_si256((__m256i*)(tree->triIdx + index), ids);
-    _mm256_add_epi32(ids, _mm256_set1_epi32(8));
+    ids = _mm256_add_epi32(ids, _mm256_set1_epi32(8));
   }
   // cleanup code
   for(; index < tree->N; index++) {
     tree->triIdx[index] = index;
   }
   
-  // calculate triangle centroids for partitioning
+  // calculate triangle centroids for partitioning SIMD
   __m256 one_third = _mm256_set1_ps(1.0f / 3.0f);
   ull i;
   for(i  = 0; i < tree->N - 7; i += 8) {
@@ -294,15 +293,15 @@ void BuildBVH(BVHTree *tree) {
       _mm256_store_ps(tree->centroid_y + i, centroid_y);
       _mm256_store_ps(tree->centroid_z + i, centroid_z);
   }
-  // redundant
+  // redundant tree->tri
   for (ull j = 0; j < i; ++j) {
-    Tri *tri = tree->tri + i;
-    tri->centroid.x = tree->centroid_x[i];
-    tri->centroid.y = tree->centroid_y[i];
-    tri->centroid.z = tree->centroid_z[i];
+    Tri *tri = tree->tri + j;
+    tri->centroid.x = tree->centroid_x[j];
+    tri->centroid.y = tree->centroid_y[j];
+    tri->centroid.z = tree->centroid_z[j];
   }
   // cleanup
-  for(; i < tree->N; i += 8) {
+  for(; i < tree->N; i++) {
     Tri *tri = tree->tri + i;
     tri->centroid = AddFloat3(AddFloat3(tri->vertex0, tri->vertex1), tri->vertex2);
     tri->centroid = MulConstFloat3(tri->centroid, 1.0f / 3.0f);
@@ -330,7 +329,6 @@ void BuildBVH(BVHTree *tree) {
 }
 
 void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
-  // old version
   BVHNode *node = tree->bvhNode + nodeIdx;
   node->aabbMin = make_float3(1e30f);
   node->aabbMax = make_float3(-1e30f);
@@ -345,7 +343,6 @@ void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
     node->aabbMax = fmaxf_float3(&node->aabbMax, &leafTri->vertex1);
     node->aabbMax = fmaxf_float3(&node->aabbMax, &leafTri->vertex2);
   }
-
 
   // unknown segmentation fault
   // BVHNode *node = tree->bvhNode + nodeIdx;
@@ -507,7 +504,7 @@ float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPo
   return bestCost;
 }
 
-// simple simd
+// SIMD
 float CalculateNodeCost(BVHNode *node) {
   __m128 upper_half = _mm256_extractf128_ps(node->aabbMinMax, 1);
   __m128 lower_half = _mm256_castps256_ps128(node->aabbMinMax);
@@ -519,6 +516,44 @@ float CalculateNodeCost(BVHNode *node) {
 }
 
 void Subdivide(BVHTree *tree, uint nodeIdx) {
+  // // terminate recursion
+  // BVHNode *node = tree->bvhNode + nodeIdx;
+  // // determine split axis using SAH
+  // int axis;
+  // float splitPos;
+  // float splitCost = FindBestSplitPlane(tree, node, &axis, &splitPos);
+  // // TODO: binary or wide BVH considering the problem of the wide BVH is that it may contain too many empty slots.
+  // float nosplitCost = CalculateNodeCost(node);
+  // if (splitCost >= nosplitCost) return;
+  // // in-place partition
+  // uint i = node->leftFirst;
+  // uint j = i + node->triCount - 1;
+  // while (i <= j) {
+  //   if (float3_at(tree->tri[tree->triIdx[i]].centroid, axis) < splitPos)
+  //     i++;
+  //   else
+  //     swap_uint(tree->triIdx + i, tree->triIdx + j--);
+  // }
+  // // abort split if one of the sides is empty
+  // uint leftCount = i - node->leftFirst;
+  // if (leftCount == 0 || leftCount == node->triCount) return;
+  // // create child nodes
+  // uint leftChildIdx = tree->nodesUsed++;
+  // uint rightChildIdx = tree->nodesUsed++;
+  // // TODO: how to express the tree in array
+  // tree->bvhNode[leftChildIdx].leftFirst = node->leftFirst;
+  // tree->bvhNode[leftChildIdx].triCount = leftCount;
+  // tree->bvhNode[rightChildIdx].leftFirst = i;
+  // tree->bvhNode[rightChildIdx].triCount = node->triCount - leftCount;
+  // node->leftFirst = leftChildIdx;
+  // node->triCount = 0;
+  // UpdateNodeBounds(tree, leftChildIdx);
+  // UpdateNodeBounds(tree, rightChildIdx);
+  // // recurse
+  // Subdivide(tree, leftChildIdx);
+  // Subdivide(tree, rightChildIdx);
+  
+  // subdivide, less than 8 leaves version - gpt
   BVHNode *node = tree->bvhNode + nodeIdx;
 
   // Determine split axis using SAH
@@ -572,62 +607,6 @@ void Subdivide(BVHTree *tree, uint nodeIdx) {
     Subdivide(tree, leftChildIdx);
     Subdivide(tree, rightChildIdx);
   }
-
-
-  // subdivide, less than 8 leaves version - gpt
-  // BVHNode *node = tree->bvhNode + nodeIdx;
-
-  // // Determine split axis using SAH
-  // int axis;
-  // float splitPos;
-  // float splitCost = FindBestSplitPlane(tree, node, &axis, &splitPos);
-
-  // // Calculate the cost of not splitting the node
-  // float nosplitCost = CalculateNodeCost(node);
-
-  // // Terminate recursion if the split cost is higher than the nosplit cost
-  // if (splitCost >= nosplitCost) return;
-
-  // // In-place partition
-  // uint i = node->leftFirst;
-  // uint j = i + node->triCount - 1;
-  // while (i <= j) {
-  //   if (float3_at(tree->tri[tree->triIdx[i]].centroid, axis) < splitPos)
-  //     i++;
-  //   else
-  //     swap_uint(tree->triIdx + i, tree->triIdx + j--);
-  // }
-
-  // // Abort split if one of the sides is empty
-  // uint leftCount = i - node->leftFirst;
-  // if (leftCount == 0 || leftCount == node->triCount) return;
-
-  // // Create child nodes
-  // if (node->triCount <= 8) {
-  //   // Leaf node with 8 or fewer primitives
-  //   node->leftFirst = node->leftFirst; // No change in leftFirst index
-  //   node->triCount = leftCount; // Update triCount to reflect the number of primitives in the left partition
-  // } else {
-  //   // Internal node
-  //   uint leftChildIdx = tree->nodesUsed++;
-  //   uint rightChildIdx = tree->nodesUsed++;
-
-  //   tree->bvhNode[leftChildIdx].leftFirst = node->leftFirst;
-  //   tree->bvhNode[leftChildIdx].triCount = leftCount;
-
-  //   tree->bvhNode[rightChildIdx].leftFirst = i;
-  //   tree->bvhNode[rightChildIdx].triCount = node->triCount - leftCount;
-
-  //   node->leftFirst = leftChildIdx;
-  //   node->triCount = 0;
-
-  //   UpdateNodeBounds(tree, leftChildIdx);
-  //   UpdateNodeBounds(tree, rightChildIdx);
-
-  //   // Recurse
-  //   Subdivide(tree, leftChildIdx);
-  //   Subdivide(tree, rightChildIdx);
-  // }
 }
 
 void InitRandom(BVHTree* tree, int triCount) {
@@ -635,6 +614,20 @@ void InitRandom(BVHTree* tree, int triCount) {
   tree->N = triCount;
   tree->tri = malloc(tree->N * sizeof(Tri));
   tree->triIdx = malloc(tree->N * sizeof(uint));
+
+  tree->vertex0_x = malloc(tree->N * sizeof(float));
+  tree->vertex0_y = malloc(tree->N * sizeof(float));
+  tree->vertex0_z = malloc(tree->N * sizeof(float));
+  tree->vertex1_x = malloc(tree->N * sizeof(float));
+  tree->vertex1_y = malloc(tree->N * sizeof(float));
+  tree->vertex1_z = malloc(tree->N * sizeof(float));
+  tree->vertex2_x = malloc(tree->N * sizeof(float));
+  tree->vertex2_y = malloc(tree->N * sizeof(float));
+  tree->vertex2_z = malloc(tree->N * sizeof(float));
+  tree->centroid_x = malloc(tree->N * sizeof(float));
+  tree->centroid_y = malloc(tree->N * sizeof(float));
+  tree->centroid_z = malloc(tree->N * sizeof(float));
+
   // intialize a scene with N random triangles
   for (ull i = 0; i < tree->N; i++) {
     float3 r0 = make_float3_3(RandomFloat(), RandomFloat(), RandomFloat());
@@ -643,6 +636,16 @@ void InitRandom(BVHTree* tree, int triCount) {
     tree->tri[i].vertex0 = SubFloat3(MulConstFloat3(r0, 9), make_float3(5));
     tree->tri[i].vertex1 = AddFloat3(tree->tri[i].vertex0, r1);
     tree->tri[i].vertex2 = AddFloat3(tree->tri[i].vertex0, r2);
+
+    tree->vertex0_x[i] =  tree->tri[i].vertex0.x;
+    tree->vertex0_y[i] =  tree->tri[i].vertex0.y;
+    tree->vertex0_z[i] =  tree->tri[i].vertex0.z;
+    tree->vertex1_x[i] =  tree->tri[i].vertex1.x;
+    tree->vertex1_y[i] =  tree->tri[i].vertex1.y;
+    tree->vertex1_z[i] =  tree->tri[i].vertex1.z;
+    tree->vertex2_x[i] =  tree->tri[i].vertex2.x;
+    tree->vertex2_y[i] =  tree->tri[i].vertex2.y;
+    tree->vertex2_z[i] =  tree->tri[i].vertex2.z;
   }
   BuildBVH(tree);
 }
