@@ -194,7 +194,7 @@ void IntersectBVH(BVHTree *tree, Ray *ray) {
   uint stackPtr = 0;
   while (1) {
     if (BVHNodeIsLeaf(node)) {
-      for (uint i = 0; i < node->triCount; i++) {
+      
         // inefficient gathering of data. another way is to swap the data when spliting instead of swaping the index
         // try and compare the two.
         __m256 vector0_x, vector0_y, vector0_z, vector1_x, vector1_y, vector1_z, vector2_x, vector2_y, vector2_z;
@@ -212,7 +212,7 @@ void IntersectBVH(BVHTree *tree, Ray *ray) {
         
         // we need to consider the number is less than 8 or not. node->triCount used for masking
         IntersectTri(ray, node->triCount, vector0_x, vector0_y, vector0_z, vector1_x, vector1_y, vector1_z, vector2_x, vector2_y, vector2_z);
-      }
+      
       if (stackPtr == 0) {
         break;
       }
@@ -274,7 +274,7 @@ void BuildBVH(BVHTree *tree) {
   
   // calculate triangle centroids for partitioning SIMD
   __m256 one_third = _mm256_set1_ps(1.0f / 3.0f);
-  ull i;
+  ull i = 0;
   for(i  = 0; i < tree->N - 7; i += 8) {
       __m256 v0x = _mm256_load_ps(tree->vertex0_x + i);
       __m256 v0y = _mm256_load_ps(tree->vertex0_y + i);
@@ -309,6 +309,19 @@ void BuildBVH(BVHTree *tree) {
     tree->centroid_y[i] = tri->centroid.y;
     tree->centroid_z[i] = tri->centroid.z;
   }
+
+
+  // sequential
+  // calculate triangle centroids for partitioning
+  // for (ull i = 0; i < tree->N; i++) {
+  //   // Strength Reduced
+  //   Tri *tri = tree->tri + i;
+  //   tri->centroid = AddFloat3(AddFloat3(tri->vertex0, tri->vertex1), tri->vertex2);
+  //   tri->centroid = MulConstFloat3(tri->centroid, 1.0f / 3.0f);
+  //   tree->centroid_x[i] = tri->centroid.x;
+  //   tree->centroid_y[i] = tri->centroid.y;
+  //   tree->centroid_z[i] = tri->centroid.z;
+  // }
   
   // assign all triangles to root node
   BVHNode *root = tree->bvhNode + tree->rootNodeIdx;
@@ -424,23 +437,23 @@ void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
   //   high = _mm256_extractf128_ps(max_temp_x, 1);
   //   __m128 max_4 = _mm_max_ps(low, high);
   //   // Shuffle and find minimum
-  //   __m128 max_2 = _mm_min_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
-  //   __m128 max_1 = _mm_min_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   __m128 max_2 = _mm_max_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   __m128 max_1 = _mm_max_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
   //   // Extract minimum value as a float
   //   _mm_store_ss(&(node->aabbMax.x), max_1);
 
   //   low = _mm256_castps256_ps128(max_temp_y);
   //   high = _mm256_extractf128_ps(max_temp_y, 1);
   //   max_4 = _mm_max_ps(low, high);
-  //   max_2 = _mm_min_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
-  //   max_1 = _mm_min_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   max_2 = _mm_max_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   max_1 = _mm_max_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
   //   _mm_store_ss(&(node->aabbMax.y), max_1);
 
   //   low = _mm256_castps256_ps128(max_temp_z);
   //   high = _mm256_extractf128_ps(max_temp_z, 1);
   //   max_4 = _mm_max_ps(low, high);
-  //   max_2 = _mm_min_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
-  //   max_1 = _mm_min_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   max_2 = _mm_max_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   max_1 = _mm_max_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
   //   _mm_store_ss(&(node->aabbMax.z), max_1);
   // }
   
@@ -488,6 +501,206 @@ float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPo
       rightSum += bin[BINS - 1 - i].triCount;
       rightCount[BINS - 2 - i] = rightSum;
       AABBGrowAABB(&rightBox, &bin[BINS - 1 - i].bounds);
+      rightArea[BINS - 2 - i] = AABBArea(&rightBox);
+    }
+    // calculate SAH cost for the 7 planes
+    scale = (boundsMax - boundsMin) / BINS;
+    for (int i = 0; i < BINS - 1; i++) {
+      float planeCost = leftCount[i] * leftArea[i] + rightCount[i] * rightArea[i];
+      if (planeCost < bestCost) {
+        *axis = a;
+        *splitPos = boundsMin + scale * (i + 1);
+        bestCost = planeCost;
+      }
+    }
+  }
+  return bestCost;
+}
+
+float FindBestSplitPlane_bugs(BVHTree *tree, BVHNode *node, int *axis, float *splitPos) {
+  float bestCost = 1e30f;
+  for (int a = 0; a < 3; a++) {
+    float boundsMin = 1e30f, boundsMax = -1e30f;
+    uint i=0;
+
+    // SIMD unknown segfault
+    // __m256 boundsMin_8 = _mm256_set1_ps(1e30f);
+    // __m256 boundsMax_8 = _mm256_set1_ps(-1e30f);
+    
+    // for(i = 0; i < node->triCount - 7; i += 8) {
+    //   __m256 centroid_a_axis_8;
+    //   __m256i indexVector;
+    //   indexVector = _mm256_loadu_si256((__m256i*)(tree->triIdx + node->leftFirst + i)); // load index vector
+    //   if(a == 0) centroid_a_axis_8 = _mm256_i32gather_ps(tree->centroid_x, indexVector, sizeof(float));
+    //   if(a == 1) centroid_a_axis_8 = _mm256_i32gather_ps(tree->centroid_y, indexVector, sizeof(float));
+    //   if(a == 2) centroid_a_axis_8 = _mm256_i32gather_ps(tree->centroid_z, indexVector, sizeof(float));      
+      
+    //   // debug
+    //   // float data[8];
+    //   // _mm256_store_ps(data, centroid_a_axis_8);
+    //   // printf("Vector values: %f %f %f %f %f %f %f %f\n",
+    //   //      data[0], data[1], data[2], data[3],
+    //   //      data[4], data[5], data[6], data[7]);
+    //   boundsMin_8 = _mm256_min_ps(boundsMin_8, centroid_a_axis_8);
+    //   boundsMax_8 = _mm256_max_ps(boundsMax_8, centroid_a_axis_8);
+    // }
+    // // Compare lower and upper 4 floats and store minimums
+    // __m128 low = _mm256_castps256_ps128(boundsMin_8);
+    // __m128 high = _mm256_extractf128_ps(boundsMin_8, 1);
+    // __m128 min_4 = _mm_min_ps(low, high);
+    // // Shuffle and find minimum
+    // __m128 min_2 = _mm_min_ps(min_4, _mm_shuffle_ps(min_4, min_4, _MM_SHUFFLE(1, 0, 3, 2)));
+    // __m128 min_1 = _mm_min_ss(min_2, _mm_shuffle_ps(min_2, min_2, _MM_SHUFFLE(0, 3, 2, 1)));
+    
+    // low = _mm256_castps256_ps128(boundsMax_8);
+    // high = _mm256_extractf128_ps(boundsMax_8, 1);
+    // __m128 max_4 = _mm_max_ps(low, high);
+    // // Shuffle and find minimum
+    // __m128 max_2 = _mm_max_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
+    // __m128 max_1 = _mm_max_ps(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
+    
+    // boundsMin = _mm_cvtss_f32(min_1);
+    // boundsMax = _mm_cvtss_f32(max_1);
+    // // clean up code
+    // for(i=0; i < node->triCount; i++) {
+    //   float centroid_a_axis;
+    //   if(a == 0) centroid_a_axis = tree->centroid_x[tree->triIdx[node->leftFirst + i]];
+    //   if(a == 1) centroid_a_axis = tree->centroid_y[tree->triIdx[node->leftFirst + i]];
+    //   if(a == 2) centroid_a_axis = tree->centroid_z[tree->triIdx[node->leftFirst + i]];
+    //   boundsMin = fmin(boundsMin, centroid_a_axis);
+    //   boundsMax = fmax(boundsMax, centroid_a_axis);
+    // }
+
+    // old version
+    for (uint i = 0; i < node->triCount; i++) {
+      Tri *triangle = tree->tri + tree->triIdx[node->leftFirst + i];
+      boundsMin = fmin(boundsMin, float3_at(triangle->centroid, a));
+      boundsMax = fmax(boundsMax, float3_at(triangle->centroid, a));
+    }
+    if (boundsMin == boundsMax) continue;
+    // populate the bins
+    // Bin bin[BINS];
+    
+    // simd version
+    float bin_aabb_max_x[BINS] = {-1e30f};
+    float bin_aabb_max_y[BINS] = {-1e30f};
+    float bin_aabb_max_z[BINS] = {-1e30f};
+    float bin_aabb_min_x[BINS] = {1e30f};
+    float bin_aabb_min_y[BINS] = {1e30f};
+    float bin_aabb_min_z[BINS] = {1e30f};
+    float bin_aabb_count[BINS] = {0};
+    
+    // old version
+    // for (int i = 0; i < BINS; i++) {
+    //   BinInit(&bin[i]);
+    // }
+    float scale = BINS / (boundsMax - boundsMin);
+    __m256i BINS_minus1_8 = _mm256_set1_epi32(BINS-1);
+    for (i = 0; i < node->triCount - 7; i += 8) {
+      __m256 centroid_a_axis_8;
+      __m256i indexVector;
+      indexVector = _mm256_loadu_si256((__m256i*)(tree->triIdx + node->leftFirst + i)); // load index vector
+      if(a == 0) centroid_a_axis_8 = _mm256_i32gather_ps(tree->centroid_x, indexVector, sizeof(float));
+      if(a == 1) centroid_a_axis_8 = _mm256_i32gather_ps(tree->centroid_y, indexVector, sizeof(float));
+      if(a == 2) centroid_a_axis_8 = _mm256_i32gather_ps(tree->centroid_z, indexVector, sizeof(float));       
+      __m256i binIdx_8 = _mm256_min_epi32(BINS_minus1_8, _mm256_cvtps_epi32(centroid_a_axis_8));
+      
+      __m256 count_8 = _mm256_i32gather_ps(bin_aabb_count, binIdx_8, sizeof(float));
+      _mm256_i32scatter_ps(bin_aabb_max_z, binIdx_8, _mm256_add_ps(count_8, _mm256_set1_ps(1)), 4);// scale of the function = 4 or 1?
+
+      __m256 vertex0_x_8 = _mm256_i32gather_ps(tree->vertex0_x, indexVector, sizeof(float));
+      __m256 vertex0_y_8 = _mm256_i32gather_ps(tree->vertex0_y, indexVector, sizeof(float));
+      __m256 vertex0_z_8 = _mm256_i32gather_ps(tree->vertex0_z, indexVector, sizeof(float));
+      __m256 vertex1_x_8 = _mm256_i32gather_ps(tree->vertex1_x, indexVector, sizeof(float));
+      __m256 vertex1_y_8 = _mm256_i32gather_ps(tree->vertex1_y, indexVector, sizeof(float));
+      __m256 vertex1_z_8 = _mm256_i32gather_ps(tree->vertex1_z, indexVector, sizeof(float));
+      __m256 vertex2_x_8 = _mm256_i32gather_ps(tree->vertex2_x, indexVector, sizeof(float));
+      __m256 vertex2_y_8 = _mm256_i32gather_ps(tree->vertex2_y, indexVector, sizeof(float));
+      __m256 vertex2_z_8 = _mm256_i32gather_ps(tree->vertex2_z, indexVector, sizeof(float));
+
+      __m256 min_x = _mm256_min_ps(_mm256_min_ps(vertex0_x_8, vertex1_x_8), vertex2_x_8);
+      __m256 min_y = _mm256_min_ps(_mm256_min_ps(vertex0_y_8, vertex1_y_8), vertex2_y_8);
+      __m256 min_z =_mm256_min_ps(_mm256_min_ps(vertex0_z_8, vertex1_z_8), vertex2_z_8);
+
+      __m256 max_x = _mm256_max_ps(_mm256_max_ps(vertex0_x_8, vertex1_x_8), vertex2_x_8);
+      __m256 max_y = _mm256_max_ps(_mm256_max_ps(vertex0_y_8, vertex1_y_8), vertex2_y_8);
+      __m256 max_z = _mm256_max_ps(_mm256_max_ps(vertex0_z_8, vertex1_z_8), vertex2_z_8);
+
+      __m256 grow_min_x = _mm256_i32gather_ps(bin_aabb_min_x, binIdx_8, sizeof(float));
+      __m256 grow_min_y = _mm256_i32gather_ps(bin_aabb_min_y, binIdx_8, sizeof(float));
+      __m256 grow_min_z = _mm256_i32gather_ps(bin_aabb_min_z, binIdx_8, sizeof(float));
+     
+      _mm256_i32scatter_ps(bin_aabb_min_x, binIdx_8, _mm256_min_ps(grow_min_x, min_x), 4); // scale of the function = 4 or 1?
+      _mm256_i32scatter_ps(bin_aabb_min_y, binIdx_8, _mm256_min_ps(grow_min_y, min_y), 4);
+      _mm256_i32scatter_ps(bin_aabb_min_z, binIdx_8, _mm256_min_ps(grow_min_z, min_z), 4);
+
+      __m256 grow_max_x = _mm256_i32gather_ps(bin_aabb_max_x, binIdx_8, sizeof(float));
+      __m256 grow_max_y = _mm256_i32gather_ps(bin_aabb_max_y, binIdx_8, sizeof(float));
+      __m256 grow_max_z = _mm256_i32gather_ps(bin_aabb_max_z, binIdx_8, sizeof(float));
+      
+      _mm256_i32scatter_ps(bin_aabb_max_x, binIdx_8, _mm256_max_ps(grow_max_x, max_x), 4);
+      _mm256_i32scatter_ps(bin_aabb_max_y, binIdx_8, _mm256_max_ps(grow_max_y, max_y), 4);
+      _mm256_i32scatter_ps(bin_aabb_max_z, binIdx_8, _mm256_max_ps(grow_max_z, max_z), 4);
+    }
+    // clean up
+    for (; i < node->triCount; i ++) {
+      float centroid_a_axis;
+      int triidx = tree->triIdx[node->leftFirst + i];
+      if(a == 0) centroid_a_axis = tree->centroid_x[triidx];
+      if(a == 1) centroid_a_axis = tree->centroid_y[triidx];
+      if(a == 2) centroid_a_axis = tree->centroid_z[triidx];
+      int binIdx = min_int(BINS - 1, (int)((centroid_a_axis - boundsMin) * scale));
+      bin_aabb_count[binIdx]++;
+      bin_aabb_min_x[binIdx] = tree->vertex0_x[triidx] < bin_aabb_max_x[binIdx] ? tree->vertex0_x[triidx] : bin_aabb_max_x[binIdx];
+      bin_aabb_min_y[binIdx] = tree->vertex0_y[triidx] < bin_aabb_max_y[binIdx] ? tree->vertex0_y[triidx] : bin_aabb_max_y[binIdx];
+      bin_aabb_min_z[binIdx] = tree->vertex0_z[triidx] < bin_aabb_max_z[binIdx] ? tree->vertex0_z[triidx] : bin_aabb_max_z[binIdx];
+      bin_aabb_max_x[binIdx] = tree->vertex0_x[triidx] > bin_aabb_max_x[binIdx] ? tree->vertex0_x[triidx] : bin_aabb_max_x[binIdx];
+      bin_aabb_max_y[binIdx] = tree->vertex0_y[triidx] > bin_aabb_max_y[binIdx] ? tree->vertex0_y[triidx] : bin_aabb_max_y[binIdx];
+      bin_aabb_max_z[binIdx] = tree->vertex0_z[triidx] > bin_aabb_max_z[binIdx] ? tree->vertex0_z[triidx] : bin_aabb_max_z[binIdx];
+    }
+
+
+    // old version
+    // for (uint i = 0; i < node->triCount; i++) {
+    //   Tri *triangle = tree->tri + tree->triIdx[node->leftFirst + i];
+    //   int binIdx = min_int(BINS - 1, (int)((float3_at(triangle->centroid, a) - boundsMin) * scale));  
+    //   bin[binIdx].triCount++;
+    //   AABBGrow(&bin[binIdx].bounds, &triangle->vertex0);
+    //   AABBGrow(&bin[binIdx].bounds, &triangle->vertex1);
+    //   AABBGrow(&bin[binIdx].bounds, &triangle->vertex2);
+    // }
+
+
+    // gather data for the 7 planes between the 8 bins
+    float leftArea[BINS - 1], rightArea[BINS - 1];
+    int leftCount[BINS - 1], rightCount[BINS - 1];
+    AABB leftBox, rightBox;
+    AABBInit(&leftBox);
+    AABBInit(&rightBox);
+    int leftSum = 0, rightSum = 0;
+    // TODO: possibly have some problem.
+    for (int i = 0; i < BINS - 1; i++) {
+      leftSum +=  bin_aabb_count[i]; // bin[i].triCount;
+      leftCount[i] = leftSum;
+      // AABBGrowAABB(&leftBox, &bin[i].bounds);
+      leftBox.bmin.x = leftBox.bmin.x < bin_aabb_min_x[i] ? leftBox.bmin.x : bin_aabb_min_x[i];
+      leftBox.bmin.y = leftBox.bmin.y < bin_aabb_min_y[i] ? leftBox.bmin.y : bin_aabb_min_y[i];
+      leftBox.bmin.z = leftBox.bmin.z < bin_aabb_min_z[i] ? leftBox.bmin.z : bin_aabb_min_z[i];
+      leftBox.bmax.x = leftBox.bmax.x > bin_aabb_max_x[i] ? leftBox.bmax.x : bin_aabb_max_x[i];
+      leftBox.bmax.y = leftBox.bmax.y > bin_aabb_max_y[i] ? leftBox.bmax.y : bin_aabb_max_y[i];
+      leftBox.bmax.z = leftBox.bmax.z > bin_aabb_max_z[i] ? leftBox.bmax.z : bin_aabb_max_z[i];
+      
+
+      leftArea[i] = AABBArea(&leftBox);
+      rightSum += bin_aabb_count[BINS - 1 - i]; // bin[BINS - 1 - i].triCount;
+      rightCount[BINS - 2 - i] = rightSum;
+      // AABBGrowAABB(&rightBox, &bin[BINS - 1 - i].bounds);
+      rightBox.bmin.x = rightBox.bmin.x < bin_aabb_min_x[BINS - 1 - i] ? rightBox.bmin.x : bin_aabb_min_x[BINS - 1 - i];
+      rightBox.bmin.y = rightBox.bmin.y < bin_aabb_min_y[BINS - 1 - i] ? rightBox.bmin.y : bin_aabb_min_y[BINS - 1 - i];
+      rightBox.bmin.z = rightBox.bmin.z < bin_aabb_min_z[BINS - 1 - i] ? rightBox.bmin.z : bin_aabb_min_z[BINS - 1 - i];
+      rightBox.bmax.x = rightBox.bmax.x > bin_aabb_max_x[BINS - 1 - i] ? rightBox.bmax.x : bin_aabb_max_x[BINS - 1 - i];
+      rightBox.bmax.y = rightBox.bmax.y > bin_aabb_max_y[BINS - 1 - i] ? rightBox.bmax.y : bin_aabb_max_y[BINS - 1 - i];
+      rightBox.bmax.z = rightBox.bmax.z > bin_aabb_max_z[BINS - 1 - i] ? rightBox.bmax.z : bin_aabb_max_z[BINS - 1 - i];
       rightArea[BINS - 2 - i] = AABBArea(&rightBox);
     }
     // calculate SAH cost for the 7 planes
