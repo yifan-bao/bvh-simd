@@ -154,7 +154,7 @@ void IntersectBVH(BVHTree *tree, Ray *ray) {
 
 void BuildBVH(BVHTree *tree) {
 #ifdef COUNTFLOPS
-  printf("before build flops: %lld\n", flopcount);
+  printf("before_build_flops %llu\n", flopcount);
 #endif
 
   // time
@@ -186,14 +186,13 @@ void BuildBVH(BVHTree *tree) {
   // subdivide recursively
   Subdivide(tree, tree->rootNodeIdx);
   
-  // TODO(xiaoyuan) time here
   build_end = stop_tsc(build_start);
-  double cycles = (double) build_end;
-  printf("build cycles: %f\n", cycles);
+  // TODO(xiaoyuan): think of overflow problem
+  printf("build_cycles %llu\n", build_end);
 #ifdef COUNTFLOPS
-  printf("build flops: %lld\n", flopcount);
+  printf("build_flops %llu\n", flopcount);
 #endif
-  printf("BVH tree built with %d nodes\n", tree->nodesUsed);
+  printf("build_nodes %d\n", tree->nodesUsed);
 }
 
 void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
@@ -333,12 +332,13 @@ void InitRandom(BVHTree* tree, int triCount) {
 
 
 void Init(BVHTree *tree, const char* filename) {
+  // TOOD(xiaoyuan): careful for overflow
   int triCount = 0;  // Initialize triangle count
 
   // Count the number of triangles in the file
   FILE* countFile = fopen(filename, "r");
   if (countFile == NULL) {
-    printf("Failed to open file: %s\n", filename);
+    printf("[ERROR] Failed to open file: %s\n", filename);
     exit(1);
   }
 
@@ -348,7 +348,7 @@ void Init(BVHTree *tree, const char* filename) {
   }
   fclose(countFile);
 
-  printf("Number of triangles: %d in file %s\n", triCount, filename);
+  printf("num_tri %d\n", triCount);
 
   // Allocate memory for triangles and triangle indices
   tree->N = triCount;
@@ -358,7 +358,7 @@ void Init(BVHTree *tree, const char* filename) {
   // Read triangle data from file
   FILE* file = fopen(filename, "r");
   if (file == NULL) {
-    printf("Failed to open file: %s\n", filename);
+    printf("[error] Failed to open file: %s\n", filename);
     exit(1);
   }
 
@@ -393,7 +393,7 @@ void Traverse(BVHTree *tree, Config *config) {
 
   // time
 #ifdef COUNTFLOPS
-  printf("before traverse flops: %lld\n", flopcount);
+  printf("before_traverse_flops %llu\n", flopcount);
 #endif
   myInt64 traverse_start, traverse_end;
   traverse_start = start_tsc();
@@ -427,10 +427,9 @@ void Traverse(BVHTree *tree, Config *config) {
   }
 
   traverse_end = stop_tsc(traverse_start);
-  double cycles = (double) traverse_end;
-  printf("traverse cycles: %f\n", cycles);
+  printf("traverse_cycles %llu\n", traverse_end);
 #ifdef COUNTFLOPS
-  printf("FLOPS COUNT: %lld flops\n", flopcount);
+  printf("total_flops %llu\n", flopcount);
 #endif
 
   if (config->save_path != NULL) {

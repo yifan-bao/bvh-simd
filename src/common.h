@@ -13,7 +13,7 @@ typedef unsigned long long ull;
 #define SCRHEIGHT	512
 
 // global variables
-ll flopcount = 0;
+ull flopcount = 0;
 
 // float3 struct and functions
 typedef struct {
