@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import json
 import pathlib
@@ -21,6 +22,9 @@ def parse_result(result):
 
 def main():
     version = 'quick_count'
+    if len(sys.argv) > 1:
+        version = sys.argv[1]
+  
     output_dir = pathlib.Path('./output')
     if not output_dir.exists():
         print(f"creating output dir: {output_dir}")
