@@ -46,8 +46,6 @@ typedef struct {
 void Subdivide(BVHTree *tree, uint nodeIdx);
 void UpdateNodeBounds(BVHTree *tree, uint nodeIdx);
 
-
-
 // functions
 void IntersectTri(Ray *ray, uint triCount,  __m256 vector0_x, __m256 vector0_y, __m256 vector0_z, __m256 vector1_x, __m256 vector1_y, __m256 vector1_z, __m256 vector2_x, __m256 vector2_y, __m256 vector2_z) {
   // Create a mask to enable/disable elements beyond the desired count - inefficient
@@ -131,12 +129,21 @@ void IntersectTri(Ray *ray, uint triCount,  __m256 vector0_x, __m256 vector0_y, 
     temp_t = _mm256_min_ps(temp_t, t); // get the minimum
 
     // reduce to one min back. Try to avoid memory access
-    temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(2, 3, 0, 1)));
-    temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(1, 0, 3, 2)));
-    temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
-    temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(0, 1, 2, 3)));
-    temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
-    ray->t = _mm256_cvtss_f32(temp_t); // store the minimum to ray->t
+    // temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(2, 3, 0, 1)));
+    // temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(1, 0, 3, 2)));
+    // temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
+    // temp_t = _mm256_min_ps(temp_t, _mm256_permute_ps(temp_t, _MM_SHUFFLE(0, 1, 2, 3)));
+    // temp_t = _mm256_min_ps(temp_t, _mm256_permute2f128_ps(temp_t, temp_t, 0x01));
+    // ray->t = _mm256_cvtss_f32(temp_t); // store the minimum to ray->t
+
+    // another reduce method
+    __m128 low = _mm256_castps256_ps128(temp_t);
+    __m128 high = _mm256_extractf128_ps(temp_t, 1);
+    __m128 min_4 = _mm_max_ps(low, high);
+    __m128 min_2 = _mm_min_ps(min_4, _mm_shuffle_ps(min_4, min_4, _MM_SHUFFLE(1, 0, 3, 2)));
+    __m128 min_1 = _mm_min_ss(min_2, _mm_shuffle_ps(min_2, min_2, _MM_SHUFFLE(0, 3, 2, 1)));
+    _mm_store_ss(&(ray->t), min_1);
+
 }
 
 // Intersect with 2 aabb boxes (adjacent child)
@@ -181,34 +188,6 @@ void IntersectAABB_AVX(const Ray *ray, __m256 bmin8, __m256 bmax8, float* dist1,
     if (tmax_1 >= tmin_1 && tmin_1 < ray->t && tmax_1 > 0) {
         *dist2 = tmin_1;
     }
-}
-
-float IntersectAABB(const Ray *ray, const float3 bmin, const float3 bmax) {
-#ifdef COUNTFLOPS
-  flopcount += 25;
-#endif
-  float tx1 = (bmin.x - ray->O.x) * ray->rD.x;
-  float tx2 = (bmax.x - ray->O.x) * ray->rD.x;
-
-  float tmin = fmin(tx1, tx2);
-  float tmax = fmax(tx1, tx2);
-  
-  float ty1 = (bmin.y - ray->O.y) * ray->rD.y;
-  float ty2 = (bmax.y - ray->O.y) * ray->rD.y;
-
-  tmin = fmax(tmin, fmin(ty1, ty2));
-  tmax = fmin(tmax, fmax(ty1, ty2));
-  
-  float tz1 = (bmin.z - ray->O.z) * ray->rD.z;
-  float tz2 = (bmax.z - ray->O.z) * ray->rD.z;
-  
-  tmin = fmax(tmin, fmin(tz1, tz2));
-  tmax = fmin(tmax, fmax(tz1, tz2));
-  
-  if (tmax >= tmin && tmin < ray->t && tmax > 0)
-    return tmin;
-  else
-    return 1e30f;
 }
 
 void IntersectBVH(BVHTree *tree, Ray *ray) {
@@ -280,16 +259,50 @@ void BuildBVH(BVHTree *tree) {
   build_start = start_tsc();
 
   // create the BVH node pool
-  // bvhNode = (BVHNode*)_aligned_malloc( sizeof( BVHNode ) * N * 2, 64 );
   tree->bvhNode = (BVHNode*)aligned_alloc(64, sizeof(BVHNode) * tree->N * 2);
 
-  // populate triangle index array
-  for (ull i = 0; i < tree->N; i++)
-    tree->triIdx[i] = i;
+  // populate triangle index array SIMD
+  __m256i ids = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0); // assume ull is 64 bit
+  uint index;
+  for(index = 0; index < tree->N-7; index += 8) {
+    _mm256_storeu_si256((__m256i*)(tree->triIdx + index), ids);
+    _mm256_add_epi32(ids, _mm256_set1_epi32(8));
+  }
+  // cleanup code
+  for(; index < tree->N; index++) {
+    tree->triIdx[index] = index;
+  }
   
   // calculate triangle centroids for partitioning
-  for (ull i = 0; i < tree->N; i++) {
-    // Strength Reduced
+  __m256 one_third = _mm256_set1_ps(1.0f / 3.0f);
+  ull i;
+  for(i  = 0; i < tree->N - 7; i += 8) {
+      __m256 v0x = _mm256_load_ps(tree->vertex0_x + i);
+      __m256 v0y = _mm256_load_ps(tree->vertex0_y + i);
+      __m256 v0z = _mm256_load_ps(tree->vertex0_z + i);
+      __m256 v1x = _mm256_load_ps(tree->vertex1_x + i);
+      __m256 v1y = _mm256_load_ps(tree->vertex1_y + i);
+      __m256 v1z = _mm256_load_ps(tree->vertex1_z + i);
+      __m256 v2x = _mm256_load_ps(tree->vertex2_x + i);
+      __m256 v2y = _mm256_load_ps(tree->vertex2_y + i);
+      __m256 v2z = _mm256_load_ps(tree->vertex2_z + i);
+
+      __m256 centroid_x = _mm256_mul_ps(_mm256_add_ps(_mm256_add_ps(v0x, v1x), v2x), one_third);
+      __m256 centroid_y = _mm256_mul_ps(_mm256_add_ps(_mm256_add_ps(v0y, v1y), v2y), one_third);
+      __m256 centroid_z = _mm256_mul_ps(_mm256_add_ps(_mm256_add_ps(v0z, v1z), v2z), one_third);
+      _mm256_store_ps(tree->centroid_x + i, centroid_x);
+      _mm256_store_ps(tree->centroid_y + i, centroid_y);
+      _mm256_store_ps(tree->centroid_z + i, centroid_z);
+  }
+  // redundant
+  for (ull j = 0; j < i; ++j) {
+    Tri *tri = tree->tri + i;
+    tri->centroid.x = tree->centroid_x[i];
+    tri->centroid.y = tree->centroid_y[i];
+    tri->centroid.z = tree->centroid_z[i];
+  }
+  // cleanup
+  for(; i < tree->N; i += 8) {
     Tri *tri = tree->tri + i;
     tri->centroid = AddFloat3(AddFloat3(tri->vertex0, tri->vertex1), tri->vertex2);
     tri->centroid = MulConstFloat3(tri->centroid, 1.0f / 3.0f);
@@ -317,6 +330,7 @@ void BuildBVH(BVHTree *tree) {
 }
 
 void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
+  // old version
   BVHNode *node = tree->bvhNode + nodeIdx;
   node->aabbMin = make_float3(1e30f);
   node->aabbMax = make_float3(-1e30f);
@@ -331,6 +345,110 @@ void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
     node->aabbMax = fmaxf_float3(&node->aabbMax, &leafTri->vertex1);
     node->aabbMax = fmaxf_float3(&node->aabbMax, &leafTri->vertex2);
   }
+
+
+  // unknown segmentation fault
+  // BVHNode *node = tree->bvhNode + nodeIdx;
+  // node->aabbMin = make_float3(1e30f);
+  // node->aabbMax = make_float3(-1e30f);
+
+  // __m256 vector0_x, vector0_y, vector0_z, vector1_x, vector1_y, vector1_z, vector2_x, vector2_y, vector2_z;
+  // __m256i indexVector;
+  // __m256 min_temp_x = _mm256_set1_ps(1e30f), min_temp_y = _mm256_set1_ps(1e30f), min_temp_z = _mm256_set1_ps(1e30f); 
+  // __m256 max_temp_x = _mm256_set1_ps(-1e30f), max_temp_y = _mm256_set1_ps(-1e30f), max_temp_z = _mm256_set1_ps(-1e30f);
+  
+  // uint i=0;
+  // uint first = node->leftFirst;
+  // for (i = 0; i < node->triCount - 7; i += 8) {
+  //   // inefficient gathering of data. If we swap the triangles when build then the data is continuous
+  //   // but swap time is longer
+  //   indexVector = _mm256_loadu_si256((__m256i*)(tree->triIdx + first + i)); // load index vector
+  //   vector0_x = _mm256_i32gather_ps(tree->vertex0_x, indexVector, sizeof(float)); // gather data using index vector
+  //   vector0_y = _mm256_i32gather_ps(tree->vertex0_y, indexVector, sizeof(float));
+  //   vector0_z = _mm256_i32gather_ps(tree->vertex0_z, indexVector, sizeof(float));
+  //   vector1_x = _mm256_i32gather_ps(tree->vertex1_x, indexVector, sizeof(float));
+  //   vector1_y = _mm256_i32gather_ps(tree->vertex1_y, indexVector, sizeof(float));
+  //   vector1_z = _mm256_i32gather_ps(tree->vertex1_z, indexVector, sizeof(float));
+  //   vector2_x = _mm256_i32gather_ps(tree->vertex2_x, indexVector, sizeof(float));
+  //   vector2_y = _mm256_i32gather_ps(tree->vertex2_y, indexVector, sizeof(float));
+  //   vector2_z = _mm256_i32gather_ps(tree->vertex2_z, indexVector, sizeof(float));
+
+  //   min_temp_x = _mm256_min_ps(_mm256_min_ps(_mm256_min_ps(vector0_x, vector1_x), vector2_x), min_temp_x);
+  //   min_temp_y = _mm256_min_ps(_mm256_min_ps(_mm256_min_ps(vector0_y, vector1_y), vector2_y), min_temp_y);
+  //   min_temp_z = _mm256_min_ps(_mm256_min_ps(_mm256_min_ps(vector0_z, vector1_z), vector2_z), min_temp_z);
+
+  //   max_temp_x = _mm256_max_ps(_mm256_max_ps(_mm256_max_ps(vector0_x, vector1_x), vector2_x),max_temp_x);
+  //   max_temp_y = _mm256_max_ps(_mm256_max_ps(_mm256_max_ps(vector0_y, vector1_y), vector2_y),max_temp_y);
+  //   max_temp_z = _mm256_max_ps(_mm256_max_ps(_mm256_max_ps(vector0_z, vector1_z), vector2_z),max_temp_z);
+  // }
+  
+  // // // cleanup code
+  // float3 aabb_min = make_float3(1e30f);
+  // float3 aabb_max = make_float3(-1e30f);
+  // for (; i < node->triCount; i++) {
+  //   uint leafTriIdx = tree->triIdx[first + i];
+  //   Tri *leafTri = tree->tri + leafTriIdx;
+  //   aabb_min = fminf_float3(&aabb_min, &leafTri->vertex0);
+  //   aabb_min = fminf_float3(&aabb_min, &leafTri->vertex1);
+  //   aabb_min = fminf_float3(&aabb_min, &leafTri->vertex2);
+  //   aabb_max = fmaxf_float3(&aabb_max, &leafTri->vertex0);
+  //   aabb_max = fmaxf_float3(&aabb_max, &leafTri->vertex1);
+  //   aabb_max = fmaxf_float3(&aabb_max, &leafTri->vertex2);
+  // }
+  
+  // if(node->triCount >= 8) {
+  // // // reduce to one minimum
+  // // // Compare lower and upper 4 floats and store minimums
+  //   __m128 low = _mm256_castps256_ps128(min_temp_x);
+  //   __m128 high = _mm256_extractf128_ps(min_temp_x, 1);
+  //   __m128 min_4 = _mm_min_ps(low, high);
+  //   // Shuffle and find minimum
+  //   __m128 min_2 = _mm_min_ps(min_4, _mm_shuffle_ps(min_4, min_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   __m128 min_1 = _mm_min_ss(min_2, _mm_shuffle_ps(min_2, min_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   _mm_store_ss(&(node->aabbMin.x), min_1);
+   
+  //   low = _mm256_castps256_ps128(min_temp_y);
+  //   high = _mm256_extractf128_ps(min_temp_y, 1);
+  //   min_4 = _mm_min_ps(low, high);
+  //   min_2 = _mm_min_ps(min_4, _mm_shuffle_ps(min_4, min_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   min_1 = _mm_min_ss(min_2, _mm_shuffle_ps(min_2, min_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   _mm_store_ss(&(node->aabbMin.y), min_1);
+
+  //   low = _mm256_castps256_ps128(min_temp_z);
+  //   high = _mm256_extractf128_ps(min_temp_z, 1);
+  //   min_4 = _mm_min_ps(low, high);
+  //   min_2 = _mm_min_ps(min_4, _mm_shuffle_ps(min_4, min_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   min_1 = _mm_min_ss(min_2, _mm_shuffle_ps(min_2, min_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   _mm_store_ss(&(node->aabbMin.z), min_1);
+    
+  //   // reduce to one maximum
+  //   // Compare lower and upper 4 floats and store minimums
+  //   low = _mm256_castps256_ps128(max_temp_x);
+  //   high = _mm256_extractf128_ps(max_temp_x, 1);
+  //   __m128 max_4 = _mm_max_ps(low, high);
+  //   // Shuffle and find minimum
+  //   __m128 max_2 = _mm_min_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   __m128 max_1 = _mm_min_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   // Extract minimum value as a float
+  //   _mm_store_ss(&(node->aabbMax.x), max_1);
+
+  //   low = _mm256_castps256_ps128(max_temp_y);
+  //   high = _mm256_extractf128_ps(max_temp_y, 1);
+  //   max_4 = _mm_max_ps(low, high);
+  //   max_2 = _mm_min_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   max_1 = _mm_min_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   _mm_store_ss(&(node->aabbMax.y), max_1);
+
+  //   low = _mm256_castps256_ps128(max_temp_z);
+  //   high = _mm256_extractf128_ps(max_temp_z, 1);
+  //   max_4 = _mm_max_ps(low, high);
+  //   max_2 = _mm_min_ps(max_4, _mm_shuffle_ps(max_4, max_4, _MM_SHUFFLE(1, 0, 3, 2)));
+  //   max_1 = _mm_min_ss(max_2, _mm_shuffle_ps(max_2, max_2, _MM_SHUFFLE(0, 3, 2, 1)));
+  //   _mm_store_ss(&(node->aabbMax.z), max_1);
+  // }
+  
+  // node->aabbMin = fminf_float3(&aabb_min, &(node->aabbMin));
+  // node->aabbMax = fmaxf_float3(&aabb_max, &(node->aabbMax));
 }
 
 float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPos) {
@@ -389,23 +507,34 @@ float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPo
   return bestCost;
 }
 
+// simple simd
 float CalculateNodeCost(BVHNode *node) {
-  float3 e = SubFloat3(node->aabbMax, node->aabbMin);  // extent of the node
-  float surfaceArea = e.x * e.y + e.y * e.z + e.z * e.x;
+  __m128 upper_half = _mm256_extractf128_ps(node->aabbMinMax, 1);
+  __m128 lower_half = _mm256_castps256_ps128(node->aabbMinMax);
+  __m128 result = _mm_sub_ps(upper_half, lower_half);
+  float e[4];
+  _mm_store_ps(e, result);
+  float surfaceArea = e[0] * e[1] + e[1] * e[2] + e[2] * e[0];  // e.x * e.y + e.y * e.z + e.z * e.x;
   return node->triCount * surfaceArea;
 }
 
+// subdivide, less than 8 leaves version - gpt
 void Subdivide(BVHTree *tree, uint nodeIdx) {
-  // terminate recursion
+
   BVHNode *node = tree->bvhNode + nodeIdx;
-  // determine split axis using SAH
+
+  // Determine split axis using SAH
   int axis;
   float splitPos;
   float splitCost = FindBestSplitPlane(tree, node, &axis, &splitPos);
-  // TODO: binary or wide BVH considering the problem of the wide BVH is that it may contain too many empty slots.
+
+  // Calculate the cost of not splitting the node
   float nosplitCost = CalculateNodeCost(node);
+
+  // Terminate recursion if the split cost is higher than the nosplit cost
   if (splitCost >= nosplitCost) return;
-  // in-place partition
+
+  // In-place partition
   uint i = node->leftFirst;
   uint j = i + node->triCount - 1;
   while (i <= j) {
@@ -414,24 +543,37 @@ void Subdivide(BVHTree *tree, uint nodeIdx) {
     else
       swap_uint(tree->triIdx + i, tree->triIdx + j--);
   }
-  // abort split if one of the sides is empty
+
+  // Abort split if one of the sides is empty
   uint leftCount = i - node->leftFirst;
   if (leftCount == 0 || leftCount == node->triCount) return;
-  // create child nodes
-  uint leftChildIdx = tree->nodesUsed++;
-  uint rightChildIdx = tree->nodesUsed++;
-  // TODO: how to express the tree in array
-  tree->bvhNode[leftChildIdx].leftFirst = node->leftFirst;
-  tree->bvhNode[leftChildIdx].triCount = leftCount;
-  tree->bvhNode[rightChildIdx].leftFirst = i;
-  tree->bvhNode[rightChildIdx].triCount = node->triCount - leftCount;
-  node->leftFirst = leftChildIdx;
-  node->triCount = 0;
-  UpdateNodeBounds(tree, leftChildIdx);
-  UpdateNodeBounds(tree, rightChildIdx);
-  // recurse
-  Subdivide(tree, leftChildIdx);
-  Subdivide(tree, rightChildIdx);
+
+  // Create child nodes
+  if (node->triCount <= 8) {
+    // Leaf node with 8 or fewer primitives
+    node->leftFirst = node->leftFirst; // No change in leftFirst index
+    node->triCount = leftCount; // Update triCount to reflect the number of primitives in the left partition
+  } else {
+    // Internal node
+    uint leftChildIdx = tree->nodesUsed++;
+    uint rightChildIdx = tree->nodesUsed++;
+
+    tree->bvhNode[leftChildIdx].leftFirst = node->leftFirst;
+    tree->bvhNode[leftChildIdx].triCount = leftCount;
+
+    tree->bvhNode[rightChildIdx].leftFirst = i;
+    tree->bvhNode[rightChildIdx].triCount = node->triCount - leftCount;
+
+    node->leftFirst = leftChildIdx;
+    node->triCount = 0;
+
+    UpdateNodeBounds(tree, leftChildIdx);
+    UpdateNodeBounds(tree, rightChildIdx);
+
+    // Recurse
+    Subdivide(tree, leftChildIdx);
+    Subdivide(tree, rightChildIdx);
+  }
 }
 
 void InitRandom(BVHTree* tree, int triCount) {
