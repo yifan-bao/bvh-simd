@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -O3
+CFLAGS = -Wall -Wextra -g -O3 -mavx2
 LIB = -lm
 SRCDIR = src
 OBJDIR = obj

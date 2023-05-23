@@ -11,8 +11,7 @@ typedef struct {
 
 // BVHNode struct and functions
 typedef struct {
-  float3 aabbMin, aabbMax;
-  uint leftFirst, triCount;
+  union { struct { float3 aabbMin; uint leftFirst; float3 aabbMax; uint triCount; }; __m256 aabbMinMax; };
 } BVHNode;
 
 int BVHNodeIsLeaf(BVHNode *node) {
