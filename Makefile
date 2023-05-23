@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -O3
+LIB = -lm
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
@@ -24,14 +25,14 @@ non-count: $(NON_COUNT_TARGET)
 
 $(COUNT_TARGET): $(OBJS)
 	@mkdir -p $(BINDIR)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LIB)
 
 $(NON_COUNT_TARGET): $(OBJS)
 	@mkdir -p $(BINDIR)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LIB)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c $(SRCDIR)/bvh.h $(SRCDIR)/common.h $(SRCDIR)/utils.h | $(OBJDIR)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $< $(LIB)
 
 $(OBJDIR):
 	@mkdir -p $(OBJDIR)

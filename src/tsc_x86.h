@@ -74,9 +74,9 @@
 #endif
 
 
-static void init_tsc() {
-	; // no need to initialize anything for x86
-}
+// static void init_tsc() {
+// 	; // no need to initialize anything for x86
+// }
 
 static myInt64 start_tsc(void) {
     tsc_counter start;
