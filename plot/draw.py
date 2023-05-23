@@ -1,9 +1,22 @@
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-# 读取数据
-data = np.loadtxt('dragon.vis')
+vis_path = 'tmp/dragon-quick.vis'
+if len(sys.argv) > 1:
+    vis_path = sys.argv[1]
+
+# read data from vis_path and filter thoes lines with split len == 5
+
+with open(vis_path, 'r') as f:
+    lines = f.readlines()
+    new_lines = []
+    for line in lines:
+        if len(line.split(" ")) == 5:
+            new_lines.append(" ".join(line.split(" ")[2:]))
+
+data = np.loadtxt(new_lines)
 
 # 创建一个3D坐标轴对象
 fig = plt.figure()

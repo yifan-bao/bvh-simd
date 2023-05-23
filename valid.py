@@ -19,7 +19,8 @@ def compare_float(float1, float2) -> bool:
 
 def compare_line(base_line, version_line) -> int:
     """
-    return 0: same
+    return 0: same miss
+    return 3: same hit
     return -1: version has less
     return 1: version has more
     return 2: different number
@@ -27,7 +28,7 @@ def compare_line(base_line, version_line) -> int:
     base_line = base_line.split(" ")
     version_line = version_line.split(" ")
     if len(base_line) != len(version_line):
-        print(f"[valid error: hit/miss] base len: {len(base_line)}, version: {len(version_line)}")
+        # print(f"[valid error: hit/miss] base len: {len(base_line)}, version: {len(version_line)}")
         if len(base_line) < len(version_line):
             return 1
         else:
@@ -42,7 +43,7 @@ def compare_line(base_line, version_line) -> int:
         version_f2 = float(version_line[3])
         version_f3 = float(version_line[4])
         if compare_float(base_f1, version_f1) and compare_float(base_f2, version_f2) and compare_float(base_f3, version_f3):
-            return 0
+            return 3
         else:
             print(f"[valid error: float error] base: {base_line}, version: {version_line}")
             return 2
@@ -65,7 +66,7 @@ def validation(version='quick'):
         print(f"deleting old output: {output}")
         output.unlink()
     
-    args_base = ['./bin/quick', '-f', './assets/dragon.tri', '-s', str(base_output)]
+    args_base = ['./bin/base_count', '-f', './assets/dragon.tri', '-s', str(base_output)]
     args = [f'./bin/{version}', '-f', './assets/dragon.tri', '-s', str(output)]
     
     print(f"running base: {args_base}")
@@ -80,26 +81,29 @@ def validation(version='quick'):
     float_err_cnt = 0
     mis_err_cnt = 0
     hit_cnt = 0
-    correct_cnt = 0
+    correct_hit_cnt = 0
+    correct_miss_cnt = 0
     for (base_line, version_line) in zip(base_output_lines, output_lines):
         comp_res = compare_line(base_line, version_line)
         if comp_res == 2:
             float_err_cnt += 1
-        if comp_res == -1:
+        elif comp_res == -1:
             mis_err_cnt += 1
-        if comp_res == 1:
+        elif comp_res == 1:
             hit_cnt += 1
-        else:
-            correct_cnt += 1
-    if correct_cnt == len(base_output_lines):
+        elif comp_res == 3:
+            correct_hit_cnt += 1
+        elif comp_res == 0:
+            correct_miss_cnt += 1
+            
+    if correct_hit_cnt + correct_miss_cnt == len(base_output_lines):
         print(f"====================VALIDATION PASS====================")
     else:
         print(f"====================VALIDATION FAIL====================")
-    print(f"float error: {float_err_cnt}, miss error: {mis_err_cnt}, hit error: {hit_cnt}, correct: {correct_cnt}, total: {len(base_output_lines)}")
+    print(f"float error: {float_err_cnt}, miss error: {mis_err_cnt}, hit error: {hit_cnt}, correct_hit: {correct_hit_cnt}, correct_miss: {correct_miss_cnt}, total: {len(base_output_lines)}")
 
     
 if __name__ == "__main__":
-    # read argv[1] as version
     version = 'quick'
     if len(sys.argv) > 1:
         version = sys.argv[1]
