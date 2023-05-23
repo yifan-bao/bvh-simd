@@ -518,9 +518,7 @@ float CalculateNodeCost(BVHNode *node) {
   return node->triCount * surfaceArea;
 }
 
-// subdivide, less than 8 leaves version - gpt
 void Subdivide(BVHTree *tree, uint nodeIdx) {
-
   BVHNode *node = tree->bvhNode + nodeIdx;
 
   // Determine split axis using SAH
@@ -574,6 +572,62 @@ void Subdivide(BVHTree *tree, uint nodeIdx) {
     Subdivide(tree, leftChildIdx);
     Subdivide(tree, rightChildIdx);
   }
+
+
+  // subdivide, less than 8 leaves version - gpt
+  // BVHNode *node = tree->bvhNode + nodeIdx;
+
+  // // Determine split axis using SAH
+  // int axis;
+  // float splitPos;
+  // float splitCost = FindBestSplitPlane(tree, node, &axis, &splitPos);
+
+  // // Calculate the cost of not splitting the node
+  // float nosplitCost = CalculateNodeCost(node);
+
+  // // Terminate recursion if the split cost is higher than the nosplit cost
+  // if (splitCost >= nosplitCost) return;
+
+  // // In-place partition
+  // uint i = node->leftFirst;
+  // uint j = i + node->triCount - 1;
+  // while (i <= j) {
+  //   if (float3_at(tree->tri[tree->triIdx[i]].centroid, axis) < splitPos)
+  //     i++;
+  //   else
+  //     swap_uint(tree->triIdx + i, tree->triIdx + j--);
+  // }
+
+  // // Abort split if one of the sides is empty
+  // uint leftCount = i - node->leftFirst;
+  // if (leftCount == 0 || leftCount == node->triCount) return;
+
+  // // Create child nodes
+  // if (node->triCount <= 8) {
+  //   // Leaf node with 8 or fewer primitives
+  //   node->leftFirst = node->leftFirst; // No change in leftFirst index
+  //   node->triCount = leftCount; // Update triCount to reflect the number of primitives in the left partition
+  // } else {
+  //   // Internal node
+  //   uint leftChildIdx = tree->nodesUsed++;
+  //   uint rightChildIdx = tree->nodesUsed++;
+
+  //   tree->bvhNode[leftChildIdx].leftFirst = node->leftFirst;
+  //   tree->bvhNode[leftChildIdx].triCount = leftCount;
+
+  //   tree->bvhNode[rightChildIdx].leftFirst = i;
+  //   tree->bvhNode[rightChildIdx].triCount = node->triCount - leftCount;
+
+  //   node->leftFirst = leftChildIdx;
+  //   node->triCount = 0;
+
+  //   UpdateNodeBounds(tree, leftChildIdx);
+  //   UpdateNodeBounds(tree, rightChildIdx);
+
+  //   // Recurse
+  //   Subdivide(tree, leftChildIdx);
+  //   Subdivide(tree, rightChildIdx);
+  // }
 }
 
 void InitRandom(BVHTree* tree, int triCount) {
