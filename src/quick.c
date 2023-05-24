@@ -22,8 +22,9 @@
 
 // Config
 typedef struct {
-  int trinumber;
+  const char *trinumber_str;
   int doValid;
+  uint trinumber;
   const char *path;
   const char *save_path;
 } Config;
@@ -39,7 +40,7 @@ typedef struct {
   BVHNode *bvhNode;
   uint rootNodeIdx;
   uint nodesUsed;
-  ull N;
+  uint N;
 } BVHTree;
 
 // forward declarations
@@ -274,7 +275,7 @@ void BuildBVH(BVHTree *tree) {
   
   // calculate triangle centroids for partitioning SIMD
   __m256 one_third = _mm256_set1_ps(1.0f / 3.0f);
-  ull i = 0;
+  uint i = 0;
   for(i  = 0; i < tree->N - 7; i += 8) {
       __m256 v0x = _mm256_load_ps(tree->vertex0_x + i);
       __m256 v0y = _mm256_load_ps(tree->vertex0_y + i);
@@ -294,7 +295,7 @@ void BuildBVH(BVHTree *tree) {
       _mm256_store_ps(tree->centroid_z + i, centroid_z);
   }
   // redundant tree->tri
-  for (ull j = 0; j < i; ++j) {
+  for (uint j = 0; j < i; ++j) {
     Tri *tri = tree->tri + j;
     tri->centroid.x = tree->centroid_x[j];
     tri->centroid.y = tree->centroid_y[j];
@@ -310,6 +311,10 @@ void BuildBVH(BVHTree *tree) {
     tree->centroid_z[i] = tri->centroid.z;
   }
 
+#ifdef COUNTFLOPS
+  // 3 + 3 + 3
+  flopcount += 9 * tree->N;
+#endif
 
   // sequential
   // calculate triangle centroids for partitioning
@@ -345,6 +350,12 @@ void UpdateNodeBounds(BVHTree *tree, uint nodeIdx) {
   BVHNode *node = tree->bvhNode + nodeIdx;
   node->aabbMin = make_float3(1e30f);
   node->aabbMax = make_float3(-1e30f);
+
+#ifdef COUNTFLOPS
+  // 3 * 6
+  flopcount += 18 * (node->triCount);
+#endif
+
   for (uint first = node->leftFirst, i = 0; i < node->triCount; i++) {
     uint leafTriIdx = tree->triIdx[first + i];
     Tri *leafTri = tree->tri + leafTriIdx;
@@ -465,17 +476,25 @@ float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPo
   float bestCost = 1e30f;
   for (int a = 0; a < 3; a++) {
     float boundsMin = 1e30f, boundsMax = -1e30f;
+#ifdef COUNTFLOPS
+    flopcount += 2 * node->triCount;
+#endif
     for (uint i = 0; i < node->triCount; i++) {
       Tri *triangle = tree->tri + tree->triIdx[node->leftFirst + i];
       boundsMin = fmin(boundsMin, float3_at(triangle->centroid, a));
       boundsMax = fmax(boundsMax, float3_at(triangle->centroid, a));
     }
+    // TODO(xiaoyuan): does float compare counts as a flop?
     if (boundsMin == boundsMax) continue;
     // populate the bins
     Bin bin[BINS];
     for (int i = 0; i < BINS; i++) {
       BinInit(&bin[i]);
     }
+#ifdef COUNTFLOPS
+    // 1 + node->triCount * (6 * 3) + (BINS - 1) * (8 * 2 + 6) + 1
+    flopcount += node->triCount * 18 + BINS * 22 - 20;
+#endif
     float scale = BINS / (boundsMax - boundsMin);
     for (uint i = 0; i < node->triCount; i++) {
       Tri *triangle = tree->tri + tree->triIdx[node->leftFirst + i];
@@ -487,11 +506,11 @@ float FindBestSplitPlane(BVHTree *tree, BVHNode *node, int *axis, float *splitPo
     }
     // gather data for the 7 planes between the 8 bins
     float leftArea[BINS - 1], rightArea[BINS - 1];
-    int leftCount[BINS - 1], rightCount[BINS - 1];
+    uint leftCount[BINS - 1], rightCount[BINS - 1];
     AABB leftBox, rightBox;
     AABBInit(&leftBox);
     AABBInit(&rightBox);
-    int leftSum = 0, rightSum = 0;
+    uint leftSum = 0, rightSum = 0;
     // TODO: possibly have some problem.
     for (int i = 0; i < BINS - 1; i++) {
       leftSum += bin[i].triCount;
@@ -729,6 +748,10 @@ float CalculateNodeCost(BVHNode *node) {
 }
 
 void Subdivide(BVHTree *tree, uint nodeIdx) {
+#ifdef COUNTFLOPS
+  flopcount += 11;
+#endif
+
   // // terminate recursion
   // BVHNode *node = tree->bvhNode + nodeIdx;
   // // determine split axis using SAH
@@ -842,7 +865,7 @@ void InitRandom(BVHTree* tree, int triCount) {
   tree->centroid_z = malloc(tree->N * sizeof(float));
 
   // intialize a scene with N random triangles
-  for (ull i = 0; i < tree->N; i++) {
+  for (uint i = 0; i < tree->N; i++) {
     float3 r0 = make_float3_3(RandomFloat(), RandomFloat(), RandomFloat());
     float3 r1 = make_float3_3(RandomFloat(), RandomFloat(), RandomFloat());
     float3 r2 = make_float3_3(RandomFloat(), RandomFloat(), RandomFloat());
@@ -866,7 +889,7 @@ void InitRandom(BVHTree* tree, int triCount) {
 
 void Init(BVHTree *tree, const char* filename) {
   // TOOD(xiaoyuan): careful for overflow
-  int triCount = 0;  // Initialize triangle count
+  uint triCount = 0;  // Initialize triangle count
 
   // Count the number of triangles in the file
   FILE* countFile = fopen(filename, "r");
@@ -881,7 +904,7 @@ void Init(BVHTree *tree, const char* filename) {
   }
   fclose(countFile);
 
-  printf("num_tri %d\n", triCount);
+  printf("num_tri %u\n", triCount);
 
   // Allocate memory for triangles and triangle indices
   tree->N = triCount;
@@ -909,7 +932,7 @@ void Init(BVHTree *tree, const char* filename) {
     exit(1);
   }
 
-  for (int t = 0; t < triCount; t++) {
+  for (uint t = 0; t < triCount; t++) {
     if (fscanf(file, "%f %f %f %f %f %f %f %f %f\n", &tree->tri[t].vertex0.x, &tree->tri[t].vertex0.y, &tree->tri[t].vertex0.z,
                &tree->tri[t].vertex1.x, &tree->tri[t].vertex1.y, &tree->tri[t].vertex1.z, &tree->tri[t].vertex2.x, &tree->tri[t].vertex2.y,
                &tree->tri[t].vertex2.z) != 9) {
@@ -995,6 +1018,7 @@ void Traverse(BVHTree *tree, Config *config) {
 }
 
 void InitOptions(Config *config) {
+  config->trinumber_str = NULL;
   config->trinumber = 0;
   config->doValid = 0;
   config->path = NULL;
@@ -1013,7 +1037,7 @@ int parse(Config *config, int argc, const char **argv) {
 
   struct argparse_option options[] = {
       OPT_HELP(),
-      OPT_INTEGER('t', "trinumber", &config->trinumber, "random trinumber", NULL, 0, 0),
+      OPT_STRING('t', "trinumber", &config->trinumber_str, "random trinumber", NULL, 0, 0),
       OPT_BOOLEAN('v', "valid", &config->doValid, "validate the result", NULL, 0, 0),
       OPT_STRING('f', "file", &config->path, "read from tri file", NULL, 0, 0),
       OPT_STRING('s', "save", &config->save_path, "save result to file", NULL, 0, 0),
@@ -1024,7 +1048,7 @@ int parse(Config *config, int argc, const char **argv) {
   argparse_init(&argparse, options, usages, 0);
   argparse_describe(&argparse, "ASL Team09 Project: BVH.", NULL);
   argc = argparse_parse(&argparse, argc, argv);
-  if (config->trinumber != 0) printf("[Config] trinumber: %d\n", config->trinumber);
+  if (config->trinumber_str != NULL) printf("[Config] trinumber_str: %s\n", config->trinumber_str);
   if (config->doValid != 0) printf("[Config] doValid: %d\n", config->doValid);
   if (config->path != NULL) printf("[Config] path: %s\n", config->path);
   if (config->save_path != NULL) printf("[Config] save_path: %s\n", config->save_path);
@@ -1062,7 +1086,8 @@ int main(int argc, const char* argv[]) {
 
   if (config.path != NULL) {
     Init(&tree, config.path);
-  } else if (config.trinumber != 0) {
+  } else if (config.trinumber_str != 0) {
+    config.trinumber = (uint) atoll(config.trinumber_str);
     InitRandom(&tree, config.trinumber);
   } else {
     printf("Usage (file mode): %s -f <filename>\n", bin_name);

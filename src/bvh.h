@@ -46,6 +46,9 @@ void AABBGrow (AABB *aabb, float3 *p) {
 
 void AABBGrowAABB (AABB *aabb, AABB *b) {
   if (b->bmin.x != 1e30f) {
+#ifdef COUNTFLOPS
+    flopcount += 12;
+#endif
     // grow(b.bmin)
     AABBGrow(aabb, &b->bmin);
     // grow(b.bmax) 
