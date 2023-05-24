@@ -5,7 +5,7 @@ import json
 import pathlib
 import subprocess
 
-STAT_ITEMS = ['build_cycles', 'traverse_cycles', 'total_flops', 'build_nodes']
+STAT_ITEMS = ['build_cycles', 'build_flops', 'traverse_cycles', 'total_flops', 'build_nodes']
 
 
 def parse_result(result):
@@ -16,7 +16,7 @@ def parse_result(result):
         for item in STAT_ITEMS:
             if line.startswith(item):
                 res_dict[item] = int(line.split()[1])
-    
+    res_dict['traverse_flops'] = res_dict['total_flops'] - res_dict['build_flops']
     return res_dict
     
 
@@ -32,15 +32,18 @@ def main():
     # get time stamp number, not str
     time_stamp = int(time.time())
     log_file = output_dir / pathlib.Path(f'{time_stamp}-{version}.log')
+    log_text = output_dir / pathlib.Path(f'{time_stamp}-{version}.txt')
+    logt = open(log_text, 'w')
     logf = open(log_file, 'w')
     print(f"logging to: {log_file}")
     
-    for i in range(1, 20):
-        tri_num = i * 100000
+    for i in range(1, 26):
+        tri_num = i * 400000
         print(f">>>> running {version} with {tri_num} triangles", end=' ')
         start = time.time()
         args = [f'./bin/{version}', '-t', str(tri_num)]
         result = subprocess.run(args, capture_output=True, text=True)
+        logt.write(result.stdout)
         delta = time.time() - start
         print(f"took {delta:.2f} seconds")
         res_dict = parse_result(result.stdout)
@@ -50,6 +53,7 @@ def main():
         logf.write(json.dumps(res_dict) + '\n')
     
     logf.close()
+    logt.close()
 
 
 if __name__ == '__main__':

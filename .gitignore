@@ -11,3 +11,4 @@ bin
 obj
 *.vis
 output/*.log
+output/*.txt
