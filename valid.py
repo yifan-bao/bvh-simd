@@ -66,7 +66,7 @@ def validation(version='quick'):
         print(f"deleting old output: {output}")
         output.unlink()
     
-    args_base = ['./bin/base_count', '-f', './assets/dragon.tri', '-s', str(base_output)]
+    args_base = ['./bin/baseline', '-f', './assets/dragon.tri', '-s', str(base_output)]
     args = [f'./bin/{version}', '-f', './assets/dragon.tri', '-s', str(output)]
     
     print(f"running base: {args_base}")
